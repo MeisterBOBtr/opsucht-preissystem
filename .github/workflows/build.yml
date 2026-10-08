@@ -20,7 +20,9 @@ jobs:
           java-version: "17"
 
       - name: Android SDK einrichten
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+         packages: 'platform-tools'
 
       - name: Android NDK und CMake installieren
         run: |
