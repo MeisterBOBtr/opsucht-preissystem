@@ -11,19 +11,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Repository laden
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Java einrichten
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Android SDK einrichten
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: ""
 
-      - name: Android NDK und CMake installieren
+      - name: Install Android tools
         run: |
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
@@ -31,30 +33,30 @@ jobs:
           sdkmanager "cmake;3.22.1"
           sdkmanager "ndk;28.2.13676358"
 
-      - name: Android-Lizenzen akzeptieren
+      - name: Accept Android licenses
         run: |
           yes | sdkmanager --licenses > /dev/null || true
 
-      - name: Levi-Launcher-Vorlage herunterladen
+      - name: Clone LeviLauncher template
         run: |
           git clone --depth 1 \
             https://github.com/QYCottage/levilauncher-android-mod-template.git \
             template
 
-      - name: BedrockTools herunterladen
+      - name: Clone BedrockTools
         run: |
           git clone --depth 1 \
             https://github.com/QYCottage/BedrockTools.git \
             bedrocktools
 
-      - name: EnTT herunterladen
+      - name: Clone EnTT
         run: |
           git clone --depth 1 \
             --branch v3.16.0 \
             https://github.com/skypjack/entt.git \
             entt
 
-      - name: Abhängigkeiten vorbereiten
+      - name: Prepare dependencies
         run: |
           rm -rf template/src/bedrocktools
           rm -rf template/src/entt
@@ -69,13 +71,11 @@ jobs:
 
           test -f template/src/entt/entt.hpp
 
-          echo "Abhängigkeiten vorbereitet."
-
-      - name: Mod-Code übernehmen
+      - name: Copy mod source
         run: |
           cp src/main.cpp template/src/main.cpp
 
-      - name: Mod konfigurieren
+      - name: Configure mod information
         working-directory: template
         run: |
           python3 - <<'PY'
@@ -84,26 +84,16 @@ jobs:
           p = Path("CMakeLists.txt")
           s = p.read_text()
 
-          s = s.replace(
-              "GIT_TAG 0.2.2",
-              "GIT_TAG main"
-          )
-
-          s = s.replace(
-              "GIT_TAG 0.2.3",
-              "GIT_TAG main"
-          )
+          s = s.replace("GIT_TAG 0.2.2", "GIT_TAG main")
+          s = s.replace("GIT_TAG 0.2.3", "GIT_TAG main")
 
           replacements = {
               'set(MOD_ID "clange_me" CACHE STRING':
                   'set(MOD_ID "opsucht_inventarwert" CACHE STRING',
-
               'set(MOD_NAME "Clange Me Mod" CACHE STRING':
                   'set(MOD_NAME "OPSUCHT Inventarwert" CACHE STRING',
-
               'set(MOD_AUTHOR "clange_me" CACHE STRING':
                   'set(MOD_AUTHOR "MeisterBOBtr" CACHE STRING',
-
               'set(MOD_LIBRARY_NAME "clange_me" CACHE STRING':
                   'set(MOD_LIBRARY_NAME "opsucht_inventarwert" CACHE STRING',
           }
@@ -114,9 +104,7 @@ jobs:
           p.write_text(s)
           PY
 
-          echo "Mod-Konfiguration abgeschlossen."
-
-      - name: LeviPack erstellen
+      - name: Build LeviPack
         working-directory: template
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
@@ -124,9 +112,9 @@ jobs:
         run: |
           pwsh ./scripts/package.ps1 -Abi arm64-v8a
 
-      - name: LeviPack bereitstellen
+      - name: Upload LeviPack
         uses: actions/upload-artifact@v4
         with:
-          name: OPSUCHT-Inventarwert-LeviPack
+          name: opsucht-inventarwert-levipack
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
