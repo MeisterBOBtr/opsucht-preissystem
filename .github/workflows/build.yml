@@ -39,7 +39,7 @@ jobs:
             -DANDROID_STL=c++_shared
 
       - name: Build
-        run: cmake --build build --target levi_package -j2
+        run: cmake --build build --target opsucht_inventarwert -j2
 
       - name: Paket als ZIP erstellen
         run: |
