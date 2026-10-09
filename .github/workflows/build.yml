@@ -1,9 +1,10 @@
 name: Build OPSUCHT Inventarwert
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,42 +18,115 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Android SDK einrichten
         uses: android-actions/setup-android@v4
-        with:
-          packages: "platform-tools"
 
       - name: Android NDK und CMake installieren
         run: |
-          sdkmanager "platform-tools" "platforms;android-28" "ndk;28.2.13676358" "cmake;3.31.6"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+          sdkmanager "cmake;3.22.1"
+          sdkmanager "ndk;28.2.13676358"
 
-      - name: CMake konfigurieren
+      - name: Android-Lizenzen akzeptieren
         run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-28 \
-            -DANDROID_STL=c++_shared
+          yes | sdkmanager --licenses > /dev/null || true
 
-      - name: Build
-        run: cmake --build build --target opsucht_inventarwert -j2
-
-      - name: Paket als ZIP erstellen
+      - name: Levi-Launcher-Vorlage herunterladen
         run: |
-          mkdir -p dist
-          cp build/out/libopsucht_inventarwert.so dist/
-          cd dist
-          zip -r ../Opsucht-Inventarwert-Schritt-1.zip .
+          git clone --depth 1 \
+            https://github.com/QYCottage/levilauncher-android-mod-template.git \
+            template
 
-      - name: Build-Dateien hochladen
+      - name: BedrockTools herunterladen
+        run: |
+          git clone --depth 1 \
+            https://github.com/QYCottage/BedrockTools.git \
+            bedrocktools
+
+      - name: EnTT herunterladen
+        run: |
+          git clone --depth 1 \
+            --branch v3.16.0 \
+            https://github.com/skypjack/entt.git \
+            entt
+
+      - name: Abhängigkeiten vorbereiten
+        run: |
+          rm -rf template/src/bedrocktools
+          rm -rf template/src/entt
+
+          mkdir -p template/src
+
+          cp -r bedrocktools/include/bedrocktools \
+            template/src/
+
+          cp -r entt/single_include/entt \
+            template/src/
+
+          test -f template/src/entt/entt.hpp
+
+          echo "Abhängigkeiten vorbereitet."
+
+      - name: Mod-Code übernehmen
+        run: |
+          cp src/main.cpp template/src/main.cpp
+
+      - name: Mod konfigurieren
+        working-directory: template
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("CMakeLists.txt")
+          s = p.read_text()
+
+          s = s.replace(
+              "GIT_TAG 0.2.2",
+              "GIT_TAG main"
+          )
+
+          s = s.replace(
+              "GIT_TAG 0.2.3",
+              "GIT_TAG main"
+          )
+
+          replacements = {
+              'set(MOD_ID "clange_me" CACHE STRING':
+                  'set(MOD_ID "opsucht_inventarwert" CACHE STRING',
+
+              'set(MOD_NAME "Clange Me Mod" CACHE STRING':
+                  'set(MOD_NAME "OPSUCHT Inventarwert" CACHE STRING',
+
+              'set(MOD_AUTHOR "clange_me" CACHE STRING':
+                  'set(MOD_AUTHOR "MeisterBOBtr" CACHE STRING',
+
+              'set(MOD_LIBRARY_NAME "clange_me" CACHE STRING':
+                  'set(MOD_LIBRARY_NAME "opsucht_inventarwert" CACHE STRING',
+          }
+
+          for old, new in replacements.items():
+              s = s.replace(old, new)
+
+          p.write_text(s)
+          PY
+
+          echo "Mod-Konfiguration abgeschlossen."
+
+      - name: LeviPack erstellen
+        working-directory: template
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: |
+          pwsh ./scripts/package.ps1 -Abi arm64-v8a
+
+      - name: LeviPack bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: Opsucht-Inventarwert-Schritt-1
-          path: |
-            Opsucht-Inventarwert-Schritt-1.zip
-            build/out/libopsucht_inventarwert.so
+          name: OPSUCHT-Inventarwert-LeviPack
+          path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
