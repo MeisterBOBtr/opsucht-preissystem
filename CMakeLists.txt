@@ -63,6 +63,8 @@ target_link_libraries(
     PRIVATE
     preloader
     EnTT::EnTT
+    android
+    log
 )
 
 target_compile_options(
