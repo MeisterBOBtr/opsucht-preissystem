@@ -62,11 +62,6 @@ constexpr const char* kApiCategoriesUrl =
     "https://api.opsucht.net/auctions/categories";
 constexpr const char* kApiStreamUrl =
     "https://api.opsucht.net/auctions/stream";
-constexpr const char* kSupabaseTestUrl =
-    "https://opeinegbcqqqreuxpdqh.supabase.co/functions/v1/mod-connection-test";
-// Supabase anon key is a public client key, not a service-role secret.
-constexpr const char* kSupabaseAnonJwt =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWluZWdiY3FxcXJldXhwZHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NDIxNzcsImV4cCI6MjEwNzAxODE3N30.96csXqouNbrwgiVH3UhJHnwr9mWhOfTmosDv0O62O1Q";
 
 // The API is deliberately a fixed background data source. The HUD does not
 // depend on the inventory screen to fetch prices. Active auctions are refreshed
@@ -74,10 +69,10 @@ constexpr const char* kSupabaseAnonJwt =
 // request fails. The stream endpoint is documented by OPSUCHT and kept as the
 // future low-latency update path; polling is used here because it is safer for
 // Android/JNI networking and does not hold a blocking SSE connection open.
-constexpr int kApiRefreshSeconds = 15;
-constexpr int kInventoryRefreshTicks = 20; // once per second at 20 TPS
-constexpr int kPriceCacheTicks = 40; // keep resolved item prices for ~2 seconds
-constexpr int kApiCategoriesRefreshSeconds = 60;
+constexpr int kApiRefreshSeconds = 30;
+constexpr int kInventoryRefreshTicks = 40; // once every 2 seconds at 20 TPS to reduce main-thread work
+constexpr int kPriceCacheTicks = 80; // keep resolved item prices for ~4 seconds
+constexpr int kApiCategoriesRefreshSeconds = 300;
 
 constexpr std::string_view kFontId =
     "opsucht_inventarwert.roboto";
@@ -880,7 +875,7 @@ public:
 
 private:
 
-    std::string httpGet(const char* endpoint, const char* bearerToken = nullptr) {
+    std::string httpGet(const char* endpoint) {
 
         if (!mSelf) {
             return {};
@@ -1015,23 +1010,6 @@ private:
                 "setReadTimeout",
                 "(I)V"
             );
-
-        jmethodID setRequestProperty =
-            env->GetMethodID(
-                connectionClass,
-                "setRequestProperty",
-                "(Ljava/lang/String;Ljava/lang/String;)V"
-            );
-
-        if (bearerToken && setRequestProperty) {
-            jstring headerName = env->NewStringUTF("Authorization");
-            std::string headerValue = std::string("Bearer ") + bearerToken;
-            jstring headerContents = env->NewStringUTF(headerValue.c_str());
-            env->CallVoidMethod(connection, setRequestProperty, headerName, headerContents);
-            env->DeleteLocalRef(headerName);
-            env->DeleteLocalRef(headerContents);
-            if (env->ExceptionCheck()) env->ExceptionClear();
-        }
 
         jmethodID input =
             env->GetMethodID(
@@ -1174,7 +1152,6 @@ private:
     void worker() {
 
         auto lastCategoryRefresh = std::chrono::steady_clock::now() - std::chrono::seconds(kApiCategoriesRefreshSeconds);
-        auto lastSupabaseHeartbeat = std::chrono::steady_clock::now() - std::chrono::seconds(60);
 
         while (!mStop.load()) {
 
@@ -1196,21 +1173,6 @@ private:
                     }
                 }
                 mApiAuctionCount.store(activeCount);
-            }
-
-            // Plan A connection test: save only a heartbeat and auction count to a
-            // dedicated Supabase test row. No item names, prices, or sales are sent.
-            const auto heartbeatNow = std::chrono::steady_clock::now();
-            if (heartbeatNow - lastSupabaseHeartbeat >= std::chrono::seconds(60)) {
-                const std::string heartbeatUrl = std::string(kSupabaseTestUrl) +
-                    "?auctions=" + std::to_string(mApiAuctionCount.load());
-                const std::string heartbeatResponse = httpGet(heartbeatUrl.c_str(), kSupabaseAnonJwt);
-                if (!heartbeatResponse.empty() && heartbeatResponse.find("\"ok\":true") != std::string::npos) {
-                    if (mSelf) mSelf->getLogger().info("OPSUCHT Supabase-Test: Verbindung und Testeintrag erfolgreich.");
-                } else {
-                    if (mSelf) mSelf->getLogger().warn("OPSUCHT Supabase-Test: kein erfolgreicher Schreibnachweis.");
-                }
-                lastSupabaseHeartbeat = heartbeatNow;
             }
 
             if (!json.empty()) {
