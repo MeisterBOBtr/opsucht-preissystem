@@ -1,10 +1,17 @@
 {
   "type": "preload-native",
-  "name": "Opsucht Inventarwert",
-  "author": "Opsucht Inventarwert",
-  "version": "0.1.0",
+  "name": "OPSUCHT Inventarwert - Supabase Verbindungstest",
+  "author": "MeisterBOBtr",
+  "version": [
+    1,
+    4,
+    0
+  ],
   "entry": "libopsucht_inventarwert.so",
-  "minecraft_versions": ["26.*"],
+  "icon": "",
+  "minecraft_versions": [
+    "1.26.*"
+  ],
   "overwrite_files": [],
   "overwrite_folders": []
 }
