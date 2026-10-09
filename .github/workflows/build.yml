@@ -22,7 +22,7 @@ jobs:
       - name: Android SDK einrichten
         uses: android-actions/setup-android@v4
         with:
-         packages: 'platform-tools'
+          packages: "platform-tools"
 
       - name: Android NDK und CMake installieren
         run: |
@@ -43,8 +43,10 @@ jobs:
 
       - name: Paket als ZIP erstellen
         run: |
-          cd build/out
-          zip -r ../../Opsucht-Inventarwert-Schritt-1.zip opsucht_inventarwert
+          mkdir -p dist
+          cp build/out/libopsucht_inventarwert.so dist/
+          cd dist
+          zip -r ../Opsucht-Inventarwert-Schritt-1.zip .
 
       - name: Build-Dateien hochladen
         uses: actions/upload-artifact@v4
@@ -52,4 +54,5 @@ jobs:
           name: Opsucht-Inventarwert-Schritt-1
           path: |
             Opsucht-Inventarwert-Schritt-1.zip
-            build/out/opsucht_inventarwert/
+            build/out/libopsucht_inventarwert.so
+          if-no-files-found: error
