@@ -1,7 +1,7 @@
-# V5 – Korrektur der Namensanzeige
+# V5 display rollback fix
 
-Die Änderung der Anzeigenamen im vorherigen V5-Build war zu aggressiv: Auf diesem Client kann `getCustomName()` die technische Geyser-Kennung zurückgeben. Dadurch verlor das HUD die lesbaren Namen aus der API.
+The previous V5 display-name change was too aggressive: on this client, `getCustomName()` can return the technical Geyser identifier. That caused the HUD to lose the readable/API names.
 
-Dieser Korrektur-Build stellt die bewährte Preiszuordnung aus V4 wieder her und verwendet `getCustomName()` nur dann, wenn der Wert tatsächlich ein lesbarer Name ist. Technische Werte im Format `geyser_custom_*` werden niemals als HUD-Name angezeigt.
+This corrective build restores the proven V4 price resolver and only uses `getCustomName()` when it is actually a human-readable name. Technical `geyser_custom_*` values are never rendered as the HUD name.
 
-Es werden keine neuen Preise geraten. Benutzerdefinierte Items greifen weiterhin nicht auf Vanilla-Preise zurück.
+No new price guessing is introduced here. Custom items still do not fall back to vanilla prices.

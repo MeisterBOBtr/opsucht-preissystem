@@ -1,11 +1,21 @@
-# Build-Prüfung
+# Build check
 
-Der GitHub-Actions-Build verwendet die offizielle Android-Vorlage von LeviLauncher. Die oberste `CMakeLists.txt` des Projekts ist deshalb nicht die CMake-Datei, mit der GitHub Actions den Build tatsächlich kompiliert.
+The GitHub Actions build uses the official LeviLauncher Android template.
+The project's own top-level CMakeLists.txt is therefore not the CMake file
+that compiles the GitHub Actions build.
 
-Der vorherige Workflow kopierte BedrockTools außerhalb des Vorlagenziels und versuchte anschließend, einen globalen Include-Pfad über `CMAKE_CXX_FLAGS` einzufügen. Der Compiler meldete weiterhin:
+The previous workflow copied BedrockTools outside the template target and
+then tried to inject a global `CMAKE_CXX_FLAGS` include path. The compiler
+still reported:
 
 `fatal error: 'bedrocktools/BedrockTools.hpp' file not found`
 
-Dieser Workflow kopiert nun den vollständigen öffentlichen Header-Ordner `bedrocktools/include/bedrocktools` direkt nach `template/src/bedrocktools`. Die offizielle Vorlage fügt `template/src` bereits zu den Include-Verzeichnissen des Mod-Ziels hinzu. Dadurch wird `#include <bedrocktools/BedrockTools.hpp>` über denselben Include-Pfad wie der übrige Mod-Quellcode aufgelöst.
+This workflow now copies the complete public
+`bedrocktools/include/bedrocktools` header tree directly into
+`template/src/bedrocktools`. The official template already adds `template/src`
+to the mod target's include directories, so
+`#include <bedrocktools/BedrockTools.hpp>` resolves through the same include
+path as the rest of the mod source.
 
-Eine Prüfung mit `test -f` stellt sicher, dass der Workflow sofort abbricht, falls der benötigte Header nicht kopiert wurde.
+A `test -f` check is included so the workflow stops immediately if the
+required header was not copied.

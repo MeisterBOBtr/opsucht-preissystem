@@ -1,13 +1,13 @@
-# Preiszuordnung V4
+# V4 Price Resolver
 
-Dieser Build verwendet die ermittelte Geyser-Custom-Kennung als primäre Identität für benutzerdefinierte OPSUCHT-Items.
+This build uses the discovered Geyser custom identifier as the primary identity for custom OPSUCHT items.
 
-- Benutzerdefinierte Kennungen werden in einen stabilen technischen Schlüssel umgewandelt.
-- API-seitige Item-Kennungen und alle nützlichen Item-Zeichenketten werden unter derselben technischen Schlüsselform indexiert.
-- Geyser-Custom-Items greifen niemals auf den Preis ihres Vanilla-Materials zurück.
-- Wenn keine exakte Übereinstimmung mit der benutzerdefinierten Kennung gefunden wird, zeigt das HUD `-` statt eines falschen Preises.
-- Bei einer exakten Übereinstimmung zeigt das HUD den Anzeigenamen aus der OPSUCHT-API.
-- Ist kein API-Anzeigename verfügbar, wird aus der technischen Kennung ein kurzer, lesbarer Ersatzname erzeugt.
-- Der bisherige Inspektorblock wird aus dem sichtbaren HUD entfernt.
+- Custom identifiers are normalized into a stable technical key.
+- API-side item identifiers and all useful item strings are indexed under the same technical-key form.
+- Geyser custom items are never allowed to fall back to the vanilla material price.
+- If no exact custom identifier match exists, the HUD shows `-` instead of a wrong price.
+- The HUD displays the OPSUCHT API display name when an exact match exists.
+- If an API display name is unavailable, a short readable fallback is generated from the technical identifier.
+- The previous inspector block is removed from the visible HUD.
 
-Vanilla-Items behalten die bestehende exakte Zuordnung über Namen und Aliase. Die Zuordnung behauptet nicht, verzauberte Varianten korrekt bepreisen zu können, solange die API nicht genügend Variantenmerkmale für einen exakten Abgleich bereitstellt.
+Vanilla items keep the existing exact name/alias matching. The resolver does not claim to price enchanted variants correctly until the API exposes enough variant identity to match them exactly.

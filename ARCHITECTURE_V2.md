@@ -1,33 +1,33 @@
+
+## Identifier Bridge 1.1.0
+
+This build adds a second API-side identifier bridge: useful string values inside the OPSUCHT `item` object are indexed as lookup aliases, while the client-side resolver also tests separator-normalized and namespace-tail variants. This is intentionally an additional bridge, not a claim that the Bedrock runtime identifier is already exposed by a public BedrockTools wrapper. The project still needs a device test before any runtime mapping can be declared proven.
 # Architektur V2
 
-## Kennungsbrücke 1.1.0
-
-Diese Version ergänzt eine zweite Kennungsbrücke auf API-Seite: Verwendbare Zeichenketten im OPSUCHT-Objekt `item` werden als Such-Aliase indexiert. Gleichzeitig prüft die clientseitige Zuordnung Varianten mit vereinheitlichten Trennzeichen und Varianten ohne den Namespace-Anteil. Dies ist eine zusätzliche Zuordnungshilfe und kein Beweis dafür, dass die Bedrock-Laufzeitkennung bereits über eine öffentliche BedrockTools-Schnittstelle verfügbar ist. Eine Prüfung auf dem Gerät ist weiterhin erforderlich, bevor die Laufzeitzuordnung als bestätigt gelten kann.
-
 ## 1. Client
-Minecraft Bedrock auf Android + BedrockTools + Preloader.
+Minecraft Bedrock Android + BedrockTools + Preloader.
 
-## 2. API-Arbeiter
-Ein unabhängiger Hintergrundthread lädt die OPSUCHT-Daten. HUD und Inventarlogik müssen nicht auf HTTP-Anfragen warten.
+## 2. API-Worker
+Ein unabhängiger Hintergrundthread lädt die OPSUCHT-Daten. Das HUD und die Inventarlogik warten nicht auf HTTP.
 
 ## 3. API-Katalog
-Die aktiven Auktionen werden in mehreren Zuordnungstabellen abgelegt:
-- vereinheitlichter Anzeigename
-- API-Kennung / Item-ID
+Die aktiven Auktionen werden in mehreren Maps abgelegt:
+- normalisierter DisplayName
+- API-Identifier / Item-ID
 - Material
 - weitere technische Aliase
 
 ## 4. Inventar
-Der vorhandene BedrockTools-/Native-Inventarpfad liest den Spielercontainer. Mengen werden unabhängig von der Darstellung erfasst.
+Der vorhandene BedrockTools/Native-Inventarpfad liest den Player-Container. Mengen werden unabhängig von der Darstellung gesammelt.
 
-## 5. Zuordnung
-Reihenfolge der Zuordnung:
-1. exakt übereinstimmender, vereinheitlichter API-Name
-2. exakt übereinstimmende API-Kennung / Alias
+## 5. Resolver
+Resolver-Reihenfolge:
+1. exakter normalisierter API-Name
+2. exakter API-Identifier/Alias
 3. Material
-4. vorsichtiger Text-Fallback
+4. konservativer Text-Fallback
 
-Wichtig: `Geyser Custom:` ist nur noch ein Fallback-Hinweis und keine primäre ID.
+Wichtig: `Geyser Custom:` ist nur noch ein Fallback-Signal, keine Primär-ID.
 
 ## 6. Anzeige
-Die Anzeige ist absichtlich von der Inventarberechnung getrennt. Intern können 36 Slots verarbeitet werden; die HUD-Liste zeigt nur einen begrenzten sichtbaren Ausschnitt.
+Die Anzeige ist absichtlich von der Inventarberechnung getrennt. 36 Slots können intern verarbeitet werden; die HUD-Liste zeigt nur einen begrenzten sichtbaren Ausschnitt.

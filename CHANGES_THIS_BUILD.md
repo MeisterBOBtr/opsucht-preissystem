@@ -1,15 +1,16 @@
-# Änderungen in diesem Build – Preiszuordnung V4
+# Changes – V4 Price Resolver
 
-- Verwendet die ermittelte technische Geyser-Custom-Kennung als primären Schlüssel für benutzerdefinierte Items.
-- Ergänzt eine stabile Vereinheitlichung technischer Schlüssel für API-Aliase und clientseitige ItemStack-Kandidaten.
-- Entfernt unscharfe Zuordnungen benutzerdefinierter Items.
-- Verhindert, dass benutzerdefinierte Items Preise des entsprechenden Vanilla-Materials übernehmen.
-- Zeigt bei einer exakten Kennungs-/Alias-Übereinstimmung den Anzeigenamen aus der OPSUCHT-API.
-- Verwendet für nicht aufgelöste benutzerdefinierte Kennungen einen kurzen Ersatznamen.
-- Entfernt den Diagnose-Inspektor aus dem normalen HUD.
-- Behält die Leistungsverbesserungen mit einer Inventaraktualisierung pro Sekunde bei.
+- Uses the discovered Geyser custom technical identifier as the primary custom-item key.
+- Adds stable technical-key normalization to both API aliases and client ItemStack candidates.
+- Removes fuzzy custom-item matching.
+- Prevents custom items from inheriting vanilla material prices.
+- Shows OPSUCHT API display names when an exact identifier/alias match is found.
+- Uses a short fallback display name for unresolved custom identifiers.
+- Removes the diagnostic inspector from the normal HUD.
+- Keeps the one-second inventory refresh/performance improvements.
 
-## Aktualisierung von Preisen und Liste
-- Die Preiszuordnung für Geyser-Custom-Items ermittelt nun zusätzlich den lesbaren technischen Namensrest (z. B. `..._golden_excalibur`) und vergleicht ihn exakt mit den Anzeigenamen-/Aliasdaten von OPSUCHT.
-- Benutzerdefinierte Items greifen niemals auf den Preis ihres Vanilla-Materials zurück.
-- Die HUD-Liste wurde auf 18 sichtbare Zeilen erweitert. Die kompakte Zeilenhöhe von 23 px lässt den Fußbereich frei.
+
+## Price/list update
+- Geyser custom price resolution now also derives the readable technical suffix (e.g. `..._golden_excalibur`) and performs exact matching against OPSUCHT display-name/alias data.
+- Custom items never fall back to their vanilla material price.
+- HUD list expanded to 18 visible rows with a compact 23px row height so the footer remains clear.

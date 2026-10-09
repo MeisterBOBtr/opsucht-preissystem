@@ -1,12 +1,12 @@
-# V3 – Item-Inspektor
+# V3 Item Inspector
 
-Dieser Build ist ein Diagnoseschritt und keine endgültige Preisreparatur.
+This build is a diagnostic step, not a final pricing fix.
 
-Der funktionierende Inventar-/API-/HUD-Pfad bleibt erhalten. Für belegte Slots zeichnet die Version Hinweise zum clientseitigen ItemStack auf, die über die native Brücke derzeit zugänglich sind:
-- mögliche Zeichenketten, die von den verfügbaren ItemStack-Funktionen zurückgegeben werden
-- Zeiger auf das Item und dessen VTable
-- die ersten 32 Byte des aktuellen ItemStack als diagnostischer Fingerabdruck
+It keeps the working inventory/API/HUD path but records, for occupied slots, the client-side ItemStack evidence currently accessible through the native bridge:
+- candidate strings returned by the available ItemStack functions
+- Item pointer / vtable pointer
+- first 32 bytes of the current ItemStack as a diagnostic fingerprint
 
-Damit soll Schluss mit Vermutungen sein. OPSUCHT-/Geyser-Items können ein Vanilla-Basisitem verwenden und gleichzeitig eine benutzerdefinierte Identität und/oder Komponenten besitzen. Die nächste Zuordnungslogik sollte erst geschrieben werden, wenn die tatsächlichen Identitätsdaten auf der Clientseite bekannt sind.
+The purpose is to stop guessing. OPSUCHT/Geyser items can use a vanilla base item while carrying custom identity and/or components. The next resolver should only be written after the actual client-side identity evidence is known.
 
-Die API wird weiterhin im Hintergrund geladen. Dieser Inspektor darf jedoch nicht als Beweis dafür gelten, dass ein angezeigter Name der tatsächlichen Marktidentität entspricht.
+The API is still loaded in the background, but this inspector must not be treated as proof that a displayed name is the market identity.

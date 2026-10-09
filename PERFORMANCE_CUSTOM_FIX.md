@@ -1,15 +1,15 @@
-# Leistungsverbesserung und Korrektur für benutzerdefinierte Items
+# Performance + Custom-Item Fix
 
-## Was geändert wurde
+## What changed
 
-Der vorherige Build durchsuchte alle 36 Slots alle paar Ticks erneut und führte wiederholt die vollständige API-Zuordnungslogik aus. Auf Android kann dies zu sichtbaren Rucklern führen.
+The previous build rescanned 36 slots every few ticks and repeatedly ran the full API matching logic. On Android this can cause visible frame drops.
 
-Dieser Build durchsucht das Inventar ungefähr einmal pro Sekunde und speichert aufgelöste Itempreise im Zwischenspeicher. Der Zwischenspeicher wird ungültig, sobald sich die API-Preistabelle ändert.
+This build scans the inventory about once per second and caches resolved item prices. The cache is invalidated when the API price table changes.
 
-Das zweite Problem war schwerwiegender: Ein Geyser-Custom-Item konnte bei der benutzerdefinierten Zuordnung scheitern und anschließend auf das Java-/Vanilla-Material zurückfallen. Eine benutzerdefinierte Netherite-Spitzhacke konnte dadurch den Preis einer normalen Netherite-Spitzhacke anzeigen.
+The second issue was more dangerous: a Geyser Custom item could fail its custom mapping and then fall through to the Java/vanilla material. A custom Netherite Pickaxe could therefore display the normal Netherite Pickaxe price.
 
-Die neue Zuordnung verhindert diesen Rückfall ausdrücklich für `Geyser Custom:`-Stacks. Ein nicht zugeordnetes benutzerdefiniertes Item wird ohne Preis angezeigt, statt einen falschen Vanilla-Preis zu erhalten.
+The new resolver explicitly blocks that fallback for `Geyser Custom:` stacks. An unresolved custom item is shown without a price instead of receiving a wrong vanilla price.
 
-## Verbleibender technischer Punkt
+## Remaining technical point
 
-Der korrekte OPSUCHT-Preis erfordert weiterhin eine zuverlässige benutzerdefinierte Bedrock-/Geyser-Kennung. Geysers System für benutzerdefinierte Items verwendet eine eindeutige Bedrock-Kennung, aber BedrockTools bietet keinen universellen öffentlichen Wrapper für diese serverseitige Zuordnung. Dieser Build behebt deshalb zuerst den unsicheren Rückfall und die Leistungsprobleme, statt eine ungeprüfte Zuordnung als korrekt auszugeben.
+The correct OPSUCHT price still requires a reliable Bedrock/Geyser custom identifier. Geyser's custom-item system uses a unique Bedrock identifier, but BedrockTools does not expose a universal public wrapper for that server-side mapping. This build therefore fixes the unsafe fallback and performance first rather than pretending an unverified mapping is correct.

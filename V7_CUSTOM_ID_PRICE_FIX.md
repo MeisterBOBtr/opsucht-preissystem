@@ -1,14 +1,15 @@
-# V7 – Korrektur der Preiszuordnung über Custom-IDs
+# V7 – Custom-ID Price Fix
 
-Dieser Build behält die Listenlänge und Anzeigeänderungen aus V6 bei.
+This build keeps the V6 list length and display changes.
 
-## Wichtigste Korrektur
-Das Android-/Geyser-Inventar kann ein benutzerdefiniertes Item beispielsweise so bereitstellen:
+## Main fix
+The Android/Geyser inventory can expose a custom item as:
 `geyser_custom_main_misc_may26_golden_excalibur`
 
-Die vorherige Zuordnungslogik versuchte, das Präfix `geyser custom` zu entfernen, bevor Unterstriche in Trennzeichen umgewandelt wurden. Dadurch konnte das tatsächliche Format `geyser_custom_...` das Präfix behalten und eine Übereinstimmung mit einer OPSUCHT-/API-Kennung wie `main_misc_may26_golden_excalibur` verfehlen.
+The previous resolver tried to remove the `geyser custom` prefix before converting `_` to separators. That meant the real `geyser_custom_...` form could keep the prefix and fail to match an OPSUCHT/API identifier such as:
+`main_misc_may26_golden_excalibur`.
 
-V7 vereinheitlicht zuerst die Trennzeichen und entfernt anschließend das Geyser-Präfix. Dadurch wird die technische Kennung ohne Präfix als exakter API-Alias geprüft, ohne auf den Preis des Vanilla-Materials zurückzufallen.
+V7 normalizes separators first and then removes the Geyser presentation prefix. It therefore tries the prefixless technical identifier as an exact API alias, without falling back to the vanilla material price.
 
-## Wichtig
-Diese Änderung verändert weder die Anzeige des End Shield noch das HUD mit 18 Zeilen. Sie verbessert ausschließlich die Preiszuordnung für benutzerdefinierte Items.
+## Important
+This does not change the End Shield display handling or the 18-row HUD. It only strengthens custom-item price matching.

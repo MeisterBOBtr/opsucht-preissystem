@@ -1,7 +1,29 @@
-# OPSUCHT Inventarwert – Supabase-Verbindungstest V1.4.0
+# OPSUCHT Inventarwert V4 – Price Resolver
 
-Diese Testversion basiert auf `OPSUCHT_Inventarwert_V7_CUSTOM_ID_PRICE_FIX`. Sie behält die bisherige OPSUCHT-API-Abfrage bei und ergänzt einen isolierten Verbindungstest zu Supabase.
+Android/Bedrock client mod for the OPSUCHT inventory value HUD.
 
-**Wichtig:** Der Test speichert keine Artikel oder Preise. Er aktualisiert alle 60 Sekunden nur eine feste Testzeile mit Zeitstempel und erkannter Auktionsanzahl. So lässt sich prüfen, ob die Mod während des Spielens schreiben kann, ohne vorhandene Daten zu verändern.
+## This build
 
-Siehe [SUPABASE_TEST_DE.md](SUPABASE_TEST_DE.md) für den Ablauf.
+The previous inspector proved that the client exposes a useful Geyser custom identifier. This version uses that identifier for exact price lookup instead of guessing from the vanilla base item.
+
+### Important behavior
+
+- API remains a fixed background source.
+- Inventory is refreshed about once per second.
+- Geyser custom items use their technical identifier as primary identity.
+- Custom items never fall back to a vanilla material price.
+- Exact match -> OPSUCHT display name + average unit price.
+- No exact match -> `-` (safe, rather than a wrong price).
+- The technical identifier stays internal; the HUD shows a short/official name.
+
+## Install/build
+
+Replace the complete project with this ZIP, keep `.github/workflows/build.yml` as included, and run the GitHub Actions build.
+
+Do not edit individual source files unless a build error requires it.
+
+
+## Price/list update
+- Geyser custom price resolution now also derives the readable technical suffix (e.g. `..._golden_excalibur`) and performs exact matching against OPSUCHT display-name/alias data.
+- Custom items never fall back to their vanilla material price.
+- HUD list expanded to 18 visible rows with a compact 23px row height so the footer remains clear.
