@@ -31,6 +31,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(bedrocktools)
 
+
+# EnTT is a header-only dependency used by BedrockTools.
+FetchContent_Declare(
+    EnTT
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG v3.14.0
+)
+FetchContent_MakeAvailable(EnTT)
+
 # ============================================================
 # Mod
 # ============================================================
@@ -53,6 +62,7 @@ target_link_libraries(
     opsucht_inventarwert
     PRIVATE
     preloader
+    EnTT::EnTT
 )
 
 target_compile_options(
@@ -68,4 +78,5 @@ set_target_properties(
     opsucht_inventarwert
     PROPERTIES
     OUTPUT_NAME "opsucht_inventarwert"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
 )
