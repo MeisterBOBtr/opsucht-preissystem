@@ -1,5 +1,5 @@
 
-name: Build OPVANTIS - UI Test
+name: Build OPVANTIS - Panel Design Test
 
 on:
   push:
@@ -26,7 +26,6 @@ jobs:
         with:
           packages: ""
 
-      
       - name: Install Android tools
         run: |
           sdkmanager "platform-tools"
@@ -36,10 +35,8 @@ jobs:
 
       - name: Install Android NDK
         run: |
-          sdkmanager --uninstall "ndk;28.2.13676358" || true
           sdkmanager --install "ndk;28.2.13676358"
           test -d "$ANDROID_HOME/ndk/28.2.13676358"
-
 
       - name: Accept Android licenses
         run: |
@@ -79,10 +76,9 @@ jobs:
 
           test -f template/src/entt/entt.hpp
 
-      - name: Copy mod source
+      - name: Copy OPVANTIS source
         run: |
           cp src/main.cpp template/src/main.cpp
-          cp src/frame_data.h template/src/frame_data.h
 
       - name: Configure mod information
         working-directory: template
@@ -124,6 +120,6 @@ jobs:
       - name: Upload LeviPack
         uses: actions/upload-artifact@v4
         with:
-          name: opvantis-ui-test-levipack
+          name: opvantis-panel-design-test-08
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
