@@ -52,7 +52,7 @@ struct OpsuchtColor {
 namespace {
 
 constexpr std::string_view kModuleId =
-    "opsucht_inventarwert.overlay";
+    "opvantis.overlay";
 
 constexpr const char* kApiBaseUrl =
     "https://api.opsucht.net/auctions";
@@ -75,7 +75,7 @@ constexpr int kPriceCacheTicks = 80; // keep resolved item prices for ~4 seconds
 constexpr int kApiCategoriesRefreshSeconds = 300;
 
 constexpr std::string_view kFontId =
-    "opsucht_inventarwert.roboto";
+    "opvantis.roboto";
 
 /*
  * Nur noch zum Ermitteln der Item-Namensfunktion.
@@ -1435,7 +1435,7 @@ public:
     bool load() {
 
         mSelf.getLogger().info(
-            "OPSUCHT Inventarwert geladen"
+            "OPVANTIS geladen"
         );
 
         return true;
@@ -1451,7 +1451,7 @@ public:
         const bool registered =
             pl::modmenu::ModuleBuilder(
                 std::string(kModuleId),
-                "OPSUCHT Inventarwert"
+                "OPVANTIS"
             )
             .modId(
                 mSelf.getId()
@@ -1997,7 +1997,7 @@ private:
 
             if (!playerInventory) {
                 if (++mInventoryReadFailures % 30 == 0) {
-                    mSelf.getLogger().info("OPSUCHT Inventar: PlayerInventory ist null");
+                    mSelf.getLogger().info("OPVANTIS Inventar: PlayerInventory ist null");
                 }
                 return;
             }
