@@ -1,5 +1,5 @@
 
-name: Build OPVANTIS - Panel Design Test
+name: Build OPVANTIS - Panel Design Test 09
 
 on:
   push:
@@ -65,20 +65,15 @@ jobs:
         run: |
           rm -rf template/src/bedrocktools
           rm -rf template/src/entt
-
           mkdir -p template/src
-
-          cp -r bedrocktools/include/bedrocktools \
-            template/src/
-
-          cp -r entt/single_include/entt \
-            template/src/
-
+          cp -r bedrocktools/include/bedrocktools template/src/
+          cp -r entt/single_include/entt template/src/
           test -f template/src/entt/entt.hpp
 
       - name: Copy OPVANTIS source
         run: |
           cp src/main.cpp template/src/main.cpp
+          cp src/frame_data.h template/src/frame_data.h
 
       - name: Configure mod information
         working-directory: template
@@ -88,7 +83,6 @@ jobs:
 
           p = Path("CMakeLists.txt")
           s = p.read_text()
-
           s = s.replace("GIT_TAG 0.2.2", "GIT_TAG main")
           s = s.replace("GIT_TAG 0.2.3", "GIT_TAG main")
 
@@ -120,6 +114,6 @@ jobs:
       - name: Upload LeviPack
         uses: actions/upload-artifact@v4
         with:
-          name: opvantis-panel-design-test-08
+          name: opvantis-panel-design-test-09
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
