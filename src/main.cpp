@@ -2558,6 +2558,8 @@ private:
         auto channel = [](std::uint32_t c, int shift) {
             return static_cast<int>((c >> shift) & 0xFFu);
         };
+        // Draw letters closer together: separate draw calls do not apply font kerning.
+        constexpr float titleAdvance = 11.0f;
         for (std::size_t i = 0; i < title.size(); ++i) {
             const float t = title.size() <= 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(title.size() - 1);
             auto mix = [t](int a, int b) { return static_cast<std::uint32_t>(a + (b - a) * t + 0.5f); };
@@ -2565,7 +2567,7 @@ private:
                 | (mix(channel(titleLight, 16), channel(titleDark, 16)) << 16)
                 | (mix(channel(titleLight, 8), channel(titleDark, 8)) << 8)
                 | mix(channel(titleLight, 0), channel(titleDark, 0));
-            drawText(commands, x + pad + static_cast<float>(i) * 13.0f, y + 10.0f, 19.0f, color, title.substr(i, 1));
+            drawText(commands, x + pad + static_cast<float>(i) * titleAdvance, y + 10.0f, 19.0f, color, title.substr(i, 1));
         }
         drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
 
