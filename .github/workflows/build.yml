@@ -1,5 +1,5 @@
 
-name: Build OPVANTIS - UI Test
+name: Build OPVANTIS - Frame Render Fix
 
 on:
   push:
@@ -72,9 +72,13 @@ jobs:
 
           test -f template/src/entt/entt.hpp
 
-      - name: Copy mod source
+      - name: Copy OPVANTIS source and frame data
         run: |
           cp src/main.cpp template/src/main.cpp
+          cp src/frame_data.h template/src/frame_data.h
+
+          mkdir -p template/resources
+          cp resources/frame.png template/resources/frame.png
 
       - name: Configure mod information
         working-directory: template
@@ -116,7 +120,7 @@ jobs:
       - name: Upload LeviPack
         uses: actions/upload-artifact@v4
         with:
-          name: opvantis-ui-test-levipack
+          name: opvantis-frame-render-fix
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
           
