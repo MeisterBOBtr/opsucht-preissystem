@@ -1,16 +1,10 @@
-# Changes – V4 Price Resolver
+# OPVANTIS – Änderungen in diesem Paket
 
-- Uses the discovered Geyser custom technical identifier as the primary custom-item key.
-- Adds stable technical-key normalization to both API aliases and client ItemStack candidates.
-- Removes fuzzy custom-item matching.
-- Prevents custom items from inheriting vanilla material prices.
-- Shows OPSUCHT API display names when an exact identifier/alias match is found.
-- Uses a short fallback display name for unresolved custom identifiers.
-- Removes the diagnostic inspector from the normal HUD.
-- Keeps the one-second inventory refresh/performance improvements.
+- Projekt-/Mod-Identität auf OPVANTIS umbenannt.
+- Vorhandenes Rahmenbild `resources/frame.png` beibehalten.
+- Bestehende Inventarauslese, Itemresolver und HUD-Rendering als Ausgangspunkt behalten.
+- Build-Workflow und Artefaktname auf OPVANTIS umgestellt.
 
-
-## Price/list update
-- Geyser custom price resolution now also derives the readable technical suffix (e.g. `..._golden_excalibur`) and performs exact matching against OPSUCHT display-name/alias data.
-- Custom items never fall back to their vanilla material price.
-- HUD list expanded to 18 visible rows with a compact 23px row height so the footer remains clear.
+## Noch nicht als erledigt ausgeben
+- Supabase-Abfrage aus `artikel` und `preise` ist in diesem Stand noch nicht angebunden; der Code nutzt weiter die OPSUCHT-Auktions-API.
+- Panel über dem geöffneten Inventar und korrekte Item-/Preiszuordnung benötigen einen Ingame-Test auf Bedrock Tools v26.52.

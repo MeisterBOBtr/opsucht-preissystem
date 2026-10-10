@@ -1,13 +1,13 @@
 {
   "type": "preload-native",
-  "name": "OPSUCHT Inventarwert - Performance Test",
+  "name": "OPVANTIS - Opsucht Inventarwert",
   "author": "MeisterBOBtr",
   "version": [
     1,
     4,
     0
   ],
-  "entry": "libopsucht_inventarwert.so",
+  "entry": "libopvantis.so",
   "icon": "",
   "minecraft_versions": [
     "1.26.*"

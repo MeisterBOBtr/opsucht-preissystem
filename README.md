@@ -1,29 +1,21 @@
-# OPSUCHT Inventarwert V4 – Price Resolver
+# OPVANTIS – Opsucht Inventarwert-Mod
 
-Android/Bedrock client mod for the OPSUCHT inventory value HUD.
+Projektbasis für Bedrock Tools v26.52 / Android ARM64. Das vorhandene Rahmenbild unter `resources/frame.png` bleibt erhalten.
 
-## This build
+## Zielverhalten
+- Panel soll auch bei geöffnetem Minecraft-Inventar sichtbar bleiben und über der Inventaroberfläche liegen.
+- Inventar-Items und Stückzahlen lesen.
+- Items anhand ihrer technischen Merkmale eindeutig mit `artikel` in Supabase abgleichen.
+- Pro Artikel die bis zu fünf neuesten Werte aus `preise` verwenden und deren Durchschnitt berechnen.
+- Stückwert, Wert je Stapel und Gesamtwert anzeigen.
+- Keine Spielitems verändern; Panel soll manuell deaktivierbar sein.
 
-The previous inspector proved that the client exposes a useful Geyser custom identifier. This version uses that identifier for exact price lookup instead of guessing from the vanilla base item.
+## Wichtiger Stand
+Diese ZIP benennt das Projekt als OPVANTIS um und enthält den bisherigen C++-Stand samt Rahmen und Build-Workflow. **Die aktuelle `main.cpp` bezieht Preise weiterhin aus der OPSUCHT-Auktions-API; die Supabase-Tabellen `artikel` und `preise` sind noch nicht als Datenquelle angebunden.** Außerdem ist die dauerhafte Darstellung über dem geöffneten Inventar auf dem Zielgerät noch nicht bestätigt. Ein erfolgreicher GitHub-Build allein beweist diese Ingame-Funktionen nicht.
 
-### Important behavior
+## Build
+1. ZIP entpacken bzw. Inhalt ins GitHub-Repository hochladen.
+2. GitHub → Actions → Build-Workflow → Run workflow.
+3. Das Artefakt `opvantis-levipack` herunterladen und auf dem Handy testen.
 
-- API remains a fixed background source.
-- Inventory is refreshed about once per second.
-- Geyser custom items use their technical identifier as primary identity.
-- Custom items never fall back to a vanilla material price.
-- Exact match -> OPSUCHT display name + average unit price.
-- No exact match -> `-` (safe, rather than a wrong price).
-- The technical identifier stays internal; the HUD shows a short/official name.
-
-## Install/build
-
-Replace the complete project with this ZIP, keep `.github/workflows/build.yml` as included, and run the GitHub Actions build.
-
-Do not edit individual source files unless a build error requires it.
-
-
-## Price/list update
-- Geyser custom price resolution now also derives the readable technical suffix (e.g. `..._golden_excalibur`) and performs exact matching against OPSUCHT display-name/alias data.
-- Custom items never fall back to their vanilla material price.
-- HUD list expanded to 18 visible rows with a compact 23px row height so the footer remains clear.
+Bitte die ZIP als Projektquelle verwenden, nicht als bereits fertig getestetes Release.
