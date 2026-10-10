@@ -1,4 +1,4 @@
-name: Build OPSUCHT Inventarwert
+name: Build OPVANTIS
 
 on:
   push:
@@ -89,13 +89,13 @@ jobs:
 
           replacements = {
               'set(MOD_ID "clange_me" CACHE STRING':
-                  'set(MOD_ID "opsucht_inventarwert" CACHE STRING',
+                  'set(MOD_ID "opvantis" CACHE STRING',
               'set(MOD_NAME "Clange Me Mod" CACHE STRING':
-                  'set(MOD_NAME "OPSUCHT Inventarwert" CACHE STRING',
+                  'set(MOD_NAME "OPVANTIS" CACHE STRING',
               'set(MOD_AUTHOR "clange_me" CACHE STRING':
                   'set(MOD_AUTHOR "MeisterBOBtr" CACHE STRING',
               'set(MOD_LIBRARY_NAME "clange_me" CACHE STRING':
-                  'set(MOD_LIBRARY_NAME "opsucht_inventarwert" CACHE STRING',
+                  'set(MOD_LIBRARY_NAME "opvantis" CACHE STRING',
           }
 
           for old, new in replacements.items():
@@ -115,6 +115,6 @@ jobs:
       - name: Upload LeviPack
         uses: actions/upload-artifact@v4
         with:
-          name: opsucht-inventarwert-levipack
+          name: opvantis-levipack
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
