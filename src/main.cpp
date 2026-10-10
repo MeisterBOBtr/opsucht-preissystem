@@ -1617,6 +1617,7 @@ private:
             // HUD text pass; relying only on drawText therefore made the panel
             // disappear exactly when the inventory was opened.
             if (self->mEnabled.load() &&
+                self->mInventoryOpen.load() &&
                 sLastUiContext &&
                 sLastTextMeasure &&
                 sLastCaretMeasure &&
@@ -1689,12 +1690,10 @@ private:
         // every drawText call, which caused the panel to duplicate and flicker.
         // Drawing after the inventory screen's own text is seen gives the panel
         // a late, stable place in the same safe drawText pass.
-        // Das Panel ist absichtlich NICHT an den Inventory-/Screen-State
-        // gebunden. Es bleibt sichtbar, solange die Mod aktiviert ist.
-        // Dadurch kann die Inventarauslese im Hintergrund ständig aktualisiert
-        // werden und das Panel verschwindet nicht beim Öffnen/Schließen des
-        // Minecraft-Inventars.
-        if (self && self->mEnabled.load() &&
+        // Test 11: Panel nur anzeigen, wenn der Inventar-/Screen-State offen ist.
+        // Die Inventarauslese läuft unabhängig davon weiter; nur das Zeichnen
+        // wird auf das geöffnete Inventar begrenzt.
+        if (self && self->mEnabled.load() && self->mInventoryOpen.load() &&
             !self->mUiPanelDrawnThisFrame.exchange(true)) {
             self->drawDirectInventoryOverlayWithArgs(ctx, font, textData, caretData);
         }
@@ -2515,7 +2514,7 @@ private:
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
         // Text/rectangle-only panel: no image texture API is used here.
         // This keeps the rendering path on the known ModMenu primitives.
-        if (!mEnabled.load()) return;
+        if (!mEnabled.load() || !mInventoryOpen.load()) return;
 
         std::vector<InventoryEntry> entries;
         double total = 0.0;
@@ -2558,8 +2557,6 @@ private:
         auto channel = [](std::uint32_t c, int shift) {
             return static_cast<int>((c >> shift) & 0xFFu);
         };
-        // Draw letters closer together: separate draw calls do not apply font kerning.
-        constexpr float titleAdvance = 11.0f;
         for (std::size_t i = 0; i < title.size(); ++i) {
             const float t = title.size() <= 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(title.size() - 1);
             auto mix = [t](int a, int b) { return static_cast<std::uint32_t>(a + (b - a) * t + 0.5f); };
@@ -2567,7 +2564,7 @@ private:
                 | (mix(channel(titleLight, 16), channel(titleDark, 16)) << 16)
                 | (mix(channel(titleLight, 8), channel(titleDark, 8)) << 8)
                 | mix(channel(titleLight, 0), channel(titleDark, 0));
-            drawText(commands, x + pad + static_cast<float>(i) * titleAdvance, y + 10.0f, 19.0f, color, title.substr(i, 1));
+            drawText(commands, x + pad + static_cast<float>(i) * 13.0f, y + 10.0f, 19.0f, color, title.substr(i, 1));
         }
         drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
 
