@@ -1637,6 +1637,7 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerOpenCalls.fetch_add(1);
+            self->addDiagLog("Container OPEN hook");
             self->mInventoryOpen.store(true);
             self->mUiPanelDrawnThisFrame.store(false);
         }
@@ -1647,6 +1648,7 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerCloseCalls.fetch_add(1);
+            self->addDiagLog("Container CLOSE hook");
             self->mInventoryOpen.store(false);
             self->mUiPanelDrawnThisFrame.store(false);
         }
@@ -1747,12 +1749,16 @@ private:
                     self->mScreenEvents.fetch_add(1);
                     self->mLastScreenKind.store(static_cast<int>(event.screen));
                     self->mLastScreenPhase.store(static_cast<int>(event.phase));
+                    self->addDiagLog(std::string("Screen type=") + std::to_string(static_cast<int>(event.screen)) +
+                        " phase=" + std::to_string(static_cast<int>(event.phase)));
 
                     if (event.screen != bedrocktools::events::ScreenKind::Container) {
                         self->mNonContainerScreenEvents.fetch_add(1);
+                        self->addDiagLog("Screen non-container");
                         return;
                     }
                     self->mContainerScreenEvents.fetch_add(1);
+                    self->addDiagLog("Screen container");
 
                     const bool open =
                         event.phase == bedrocktools::events::ScreenPhase::Opened;
@@ -2519,6 +2525,12 @@ private:
         return r;
     }
 
+    void addDiagLog(const std::string& message) {
+        std::lock_guard<std::mutex> lock(mDiagLogMutex);
+        mDiagLog.push_back(message);
+        if (mDiagLog.size() > 6) mDiagLog.erase(mDiagLog.begin());
+    }
+
     void drawDiagnosticOverlay() {
         // Independent diagnostic surface: intentionally visible while inventory is closed.
         std::vector<pl::modmenu::DrawCommand> commands;
@@ -2531,7 +2543,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
-        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T13");
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T15");
         auto line = [&](int row, const std::string& label, const std::string& value) {
             drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
             drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
@@ -2573,7 +2585,7 @@ private:
         constexpr float y = 38.0f;
         // Keep the current panel width; extend it vertically for 18 item rows.
         constexpr float w = 390.0f;
-        constexpr float h = 790.0f;
+        constexpr float h = 860.0f;
         constexpr float pad = 14.0f;
         constexpr std::uint32_t bg = 0xE8171921;       // Preserve current dark background.
         constexpr std::uint32_t white = 0xFFF0F0F0;
@@ -2645,7 +2657,7 @@ private:
         // The panel itself remains visible whether the inventory is open or closed.
         const float diagY = y + 500.0f;
         drawRect(commands, x + 1.0f, diagY - 8.0f, w - 2.0f, 1.0f, divider);
-        drawText(commands, x + pad, diagY, 10.0f, titleLight, "DIAGNOSE (TEST) ");
+        drawText(commands, x + pad, diagY, 10.0f, titleLight, "DIAGNOSE (TEST 15) ");
         auto diagLine = [&](int row, const std::string& label, const std::string& value) {
             drawText(commands, x + pad, diagY + 18.0f + row * 15.0f, 8.0f, muted, label);
             drawText(commands, x + 205.0f, diagY + 18.0f + row * 15.0f, 8.0f, white, value);
@@ -2658,6 +2670,24 @@ private:
         diagLine(5, "Open/Close-Hooks:", std::to_string(mContainerOpenCalls.load()) + " / " + std::to_string(mContainerCloseCalls.load()));
         diagLine(6, "Text-Aufrufe / Treffer:", std::to_string(mDrawTextCalls.load()) + " / " + std::to_string(mInventoryLabelHits.load()));
         diagLine(7, "Slots / Preis-Treffer:", std::to_string(mDiagSlots.load()) + " / " + std::to_string(mDiagPriceMatches.load()));
+
+        const float logY = diagY + 145.0f;
+        drawText(commands, x + pad, logY, 9.0f, titleLight, "EREIGNISVERLAUF (NEUESTE ZUERST)");
+        std::vector<std::string> logCopy;
+        {
+            std::lock_guard<std::mutex> lock(mDiagLogMutex);
+            logCopy = mDiagLog;
+        }
+        if (logCopy.empty()) {
+            drawText(commands, x + pad, logY + 15.0f, 8.0f, muted, "Noch keine Ereignisse empfangen");
+        } else {
+            const std::size_t count = std::min<std::size_t>(5, logCopy.size());
+            for (std::size_t i = 0; i < count; ++i) {
+                const std::string& msg = logCopy[logCopy.size() - 1 - i];
+                std::string clipped = msg.size() > 48 ? msg.substr(0, 45) + "..." : msg;
+                drawText(commands, x + pad, logY + 15.0f + static_cast<float>(i) * 12.0f, 7.0f, muted, clipped);
+            }
+        }
 
         const float footerY = y + h - 56.0f;
         drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
@@ -2752,6 +2782,8 @@ private:
     std::atomic<std::uint64_t> mInventoryLabelHits{0};
     std::atomic<int> mLastScreenKind{-1};
     std::atomic<int> mLastScreenPhase{-1};
+    std::mutex mDiagLogMutex;
+    std::vector<std::string> mDiagLog;
 
     std::mutex mDataMutex;
     std::unordered_map<std::string, CachedPrice> mPriceCache;
