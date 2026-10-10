@@ -26,13 +26,20 @@ jobs:
         with:
           packages: ""
 
+      
       - name: Install Android tools
         run: |
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
           sdkmanager "cmake;3.22.1"
-          sdkmanager "ndk;28.2.13676358"
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --uninstall "ndk;28.2.13676358" || true
+          sdkmanager --install "ndk;28.2.13676358"
+          test -d "$ANDROID_HOME/ndk/28.2.13676358"
+
 
       - name: Accept Android licenses
         run: |
