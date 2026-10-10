@@ -1629,6 +1629,8 @@ private:
                     sLastCaretMeasure
                 );
             }
+            // Test 13 diagnostic: this small panel is independent of inventory state.
+            if (self->mEnabled.load()) self->drawDiagnosticOverlay();
         }
         if (sOriginalTick) sOriginalTick(actor);
     }
@@ -1637,6 +1639,7 @@ private:
     static void* directContainerOpenHook(void* a0, void* a1, void* a2, void* a3, void* a4, void* a5, void* a6, void* a7) {
         auto* self = sInstance;
         if (self) {
+            self->mContainerOpenCalls.fetch_add(1);
             self->mInventoryOpen.store(true);
             self->mUiPanelDrawnThisFrame.store(false);
         }
@@ -1646,6 +1649,7 @@ private:
     static void* directContainerDtorHook(void* a0, void* a1, void* a2, void* a3, void* a4, void* a5, void* a6, void* a7) {
         auto* self = sInstance;
         if (self) {
+            self->mContainerCloseCalls.fetch_add(1);
             self->mInventoryOpen.store(false);
             self->mUiPanelDrawnThisFrame.store(false);
         }
@@ -1679,7 +1683,9 @@ private:
                 uiText.find("inventory") != std::string::npos ||
                 uiText.find("inventar") != std::string::npos;
 
+            self->mDrawTextCalls.fetch_add(1);
             if (inventoryLabel) {
+                self->mInventoryLabelHits.fetch_add(1);
                 self->mInventoryTextSeenThisFrame.store(true);
                 self->mInventoryTextMissingFrames.store(0);
                 self->mInventoryOpen.store(true);
@@ -1741,32 +1747,22 @@ private:
                     auto* self = static_cast<OpsuchtInventarwertMod*>(userData);
                     const auto& event =
                         *static_cast<bedrocktools::events::ScreenStateEvent*>(payload);
+                    self->mScreenEvents.fetch_add(1);
+                    self->mLastScreenKind.store(static_cast<int>(event.screen));
+                    self->mLastScreenPhase.store(static_cast<int>(event.phase));
 
-                    // TEST 12: Diagnose-Fallback. Nicht nur Container akzeptieren:
-                    // manche Bedrock-Versionen melden das Spielerinventar unter einem
-                    // anderen ScreenKind. Protokolliere den gemeldeten Typ und die Phase.
+                    if (event.screen != bedrocktools::events::ScreenKind::Container) {
+                        self->mNonContainerScreenEvents.fetch_add(1);
+                        return;
+                    }
+                    self->mContainerScreenEvents.fetch_add(1);
+
                     const bool open =
                         event.phase == bedrocktools::events::ScreenPhase::Opened;
-                    const bool closed =
-                        event.phase == bedrocktools::events::ScreenPhase::Closed;
 
-                    self->mSelf.getLogger().info(
-                        "OPVANTIS TEST12 ScreenStateEvent: screen={} phase={} open={} closed={}",
-                        static_cast<int>(event.screen),
-                        static_cast<int>(event.phase),
-                        open,
-                        closed
-                    );
-
-                    // Test 12 akzeptiert vorübergehend alle ScreenKinds. Dadurch
-                    // prüfen wir, ob der bisherige Container-Filter die Anzeige
-                    // verhindert hat. Wenn ein beliebiger Bildschirm geöffnet wird,
-                    // ist das Panel sichtbar; beim Schließen wird es ausgeblendet.
-                    if (open) {
-                        self->mInventoryOpen.store(true);
-                    } else if (closed) {
-                        self->mInventoryOpen.store(false);
-                    }
+                    self->mInventoryOpen.store(open);
+                    // Der Screen-State beeinflusst die Anzeige nicht mehr. Die Inventardaten
+                    // werden unabhängig davon dauerhaft aktualisiert.
                 },
                 this
             );
@@ -2526,6 +2522,38 @@ private:
         return r;
     }
 
+    void drawDiagnosticOverlay() {
+        // Independent diagnostic surface: intentionally visible while inventory is closed.
+        std::vector<pl::modmenu::DrawCommand> commands;
+        commands.reserve(32);
+        constexpr float x = 430.0f, y = 38.0f, w = 330.0f, h = 244.0f;
+        constexpr std::uint32_t bg = 0xEE10131B, white = 0xFFF2F2F2;
+        constexpr std::uint32_t accent = 0xFFD5A8FF, muted = 0xFFB8C0CC;
+        drawRect(commands, x, y, w, h, bg);
+        drawRect(commands, x, y, w, 3.0f, 0xFF7435B0);
+        drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
+        drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
+        drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T13");
+        auto line = [&](int row, const std::string& label, const std::string& value) {
+            drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
+            drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
+        };
+        line(0, "Inventar-Status:", mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN");
+        line(1, "Screen-Events:", std::to_string(mScreenEvents.load()));
+        line(2, "letzter Screen-Typ:", std::to_string(mLastScreenKind.load()));
+        line(3, "letzte Phase:", std::to_string(mLastScreenPhase.load()));
+        line(4, "Container-Events:", std::to_string(mContainerScreenEvents.load()));
+        line(5, "andere Screen-Events:", std::to_string(mNonContainerScreenEvents.load()));
+        line(6, "Container-Open-Hook:", std::to_string(mContainerOpenCalls.load()));
+        line(7, "Container-Close-Hook:", std::to_string(mContainerCloseCalls.load()));
+        line(8, "Text-Aufrufe:", std::to_string(mDrawTextCalls.load()));
+        line(9, "Inventar-Text-Treffer:", std::to_string(mInventoryLabelHits.load()));
+        line(10, "Slots erkannt:", std::to_string(mDiagSlots.load()));
+        line(11, "Preis-Treffer:", std::to_string(mDiagPriceMatches.load()));
+        pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".diagnostic", commands);
+    }
+
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
         // Text/rectangle-only panel: no image texture API is used here.
         // This keeps the rendering path on the known ModMenu primitives.
@@ -2700,6 +2728,15 @@ private:
     std::atomic<std::uint64_t> mDiagRawOk{0};
     std::atomic<std::uint64_t> mDiagRawFail{0};
     std::atomic<std::uint64_t> mDiagPriceMatches{0};
+    std::atomic<std::uint64_t> mScreenEvents{0};
+    std::atomic<std::uint64_t> mContainerScreenEvents{0};
+    std::atomic<std::uint64_t> mNonContainerScreenEvents{0};
+    std::atomic<std::uint64_t> mContainerOpenCalls{0};
+    std::atomic<std::uint64_t> mContainerCloseCalls{0};
+    std::atomic<std::uint64_t> mDrawTextCalls{0};
+    std::atomic<std::uint64_t> mInventoryLabelHits{0};
+    std::atomic<int> mLastScreenKind{-1};
+    std::atomic<int> mLastScreenPhase{-1};
 
     std::mutex mDataMutex;
     std::unordered_map<std::string, CachedPrice> mPriceCache;
