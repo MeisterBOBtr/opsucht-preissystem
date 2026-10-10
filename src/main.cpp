@@ -7,7 +7,6 @@
 #include <bedrocktools/BedrockTools.hpp>
 #include <bedrocktools/Api.hpp>
 #include <bedrocktools/events/Events.hpp>
-#include "frame_data.h"
 
 #include <jni.h>
 
@@ -1445,7 +1444,6 @@ public:
         mStop = false;
 
         registerFont();
-        registerFrameImage();
 
         const bool registered =
             pl::modmenu::ModuleBuilder(
@@ -2505,21 +2503,6 @@ private:
         );
     }
 
-    bool registerFrameImage() {
-        static const std::string imageId = "opvantis.original_frame";
-        const bool ok = pl::modmenu::registerImage(
-            imageId,
-            std::span<const unsigned char>(
-                reinterpret_cast<const unsigned char*>(opvantis_frame::kRgba),
-                opvantis_frame::kRgbaSize
-            ),
-            opvantis_frame::kWidth,
-            opvantis_frame::kHeight
-        );
-        mSelf.getLogger().info("OPVANTIS Originalrahmen-Textur: {}", ok ? "OK" : "FEHLER");
-        return ok;
-    }
-
     void drawNativePanelAfterScreen(void*) {}
 
     static OpsuchtRectangleArea makePanelRect(float left, float top, float right, float bottom) {
@@ -2530,6 +2513,8 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
+        // Text/rectangle-only panel: no image texture API is used here.
+        // This keeps the rendering path on the known ModMenu primitives.
         if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
@@ -2543,18 +2528,70 @@ private:
         }
 
         std::vector<pl::modmenu::DrawCommand> commands;
-        commands.reserve(1);
+        commands.reserve(64);
 
-        // Draw the actual original PNG texture as one GPU image command.
-        // No pixel-by-pixel rectangles: this keeps the render path lightweight.
-        pl::modmenu::DrawCommand frame{};
-        frame.type = pl::modmenu::DrawCommandType::Image;
-        frame.x = 18.0f;
-        frame.y = 24.0f;
-        frame.w = 330.0f;
-        frame.h = 330.0f * 920.0f / 712.0f;
-        frame.imageId = "opvantis.original_frame";
-        commands.push_back(std::move(frame));
+        constexpr float x = 18.0f;
+        constexpr float y = 38.0f;
+        constexpr float w = 390.0f;
+        constexpr float h = 430.0f;
+        constexpr float pad = 14.0f;
+        constexpr std::uint32_t bg = 0xE8171921;
+        constexpr std::uint32_t gold = 0xFFE5BD69;
+        constexpr std::uint32_t white = 0xFFF0F0F0;
+        constexpr std::uint32_t muted = 0xFFB6BBC5;
+        constexpr std::uint32_t divider = 0xFF514633;
+
+        // One clean panel; no separate boxes around each item.
+        drawRect(commands, x, y, w, h, bg);
+        drawRect(commands, x, y, w, 3.0f, gold);
+        drawRect(commands, x, y + h - 3.0f, w, 3.0f, gold);
+        drawRect(commands, x + 1.0f, y + 53.0f, w - 2.0f, 1.0f, divider);
+        drawRect(commands, x + 1.0f, y + 91.0f, w - 2.0f, 1.0f, divider);
+
+        drawText(commands, x + pad, y + 10.0f, 19.0f, gold, "OPVANTIS");
+        drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
+
+        drawText(commands, x + pad, y + 65.0f, 10.0f, gold, "ITEM");
+        drawText(commands, x + 220.0f, y + 65.0f, 10.0f, gold, "MENGE");
+        drawText(commands, x + 285.0f, y + 65.0f, 10.0f, gold, "PREIS/ST.");
+
+        const float firstRow = y + 105.0f;
+        constexpr float rowH = 22.0f;
+        constexpr std::size_t maxRows = 12;
+        if (entries.empty()) {
+            drawText(commands, x + pad, firstRow, 12.0f, white, "Inventar wird gelesen...");
+        } else {
+            const std::size_t shown = std::min<std::size_t>(entries.size(), maxRows);
+            for (std::size_t i = 0; i < shown; ++i) {
+                const auto& entry = entries[i];
+                std::string name = entry.name.empty() ? "Unbekannt" : entry.name;
+                if (name.size() > 23) name = name.substr(0, 20) + "...";
+                const float rowY = firstRow + static_cast<float>(i) * rowH;
+                drawText(commands, x + pad, rowY, 11.0f, white, name);
+
+                std::ostringstream amount;
+                amount << entry.amount;
+                drawText(commands, x + 224.0f, rowY, 11.0f, white, amount.str());
+
+                const std::string price = entry.unitPrice > 0.0 ? formatMoney(entry.unitPrice) : "-";
+                drawText(commands, x + 285.0f, rowY, 11.0f,
+                         entry.unitPrice > 0.0 ? gold : muted, price);
+            }
+            if (entries.size() > maxRows) {
+                std::ostringstream more;
+                more << "+ " << (entries.size() - maxRows) << " weitere Items";
+                drawText(commands, x + pad, firstRow + maxRows * rowH, 9.0f, muted, more.str());
+            }
+        }
+
+        const float footerY = y + h - 56.0f;
+        drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
+        drawText(commands, x + pad, footerY, 9.0f, muted, "GESAMTWERT DES INVENTARS");
+        drawText(commands, x + pad, footerY + 17.0f, 17.0f, gold, formatMoney(total));
+
+        std::ostringstream status;
+        status << pricedItems << " bewertete Eintraege";
+        drawText(commands, x + 220.0f, footerY + 20.0f, 9.0f, muted, status.str());
 
         pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
     }
