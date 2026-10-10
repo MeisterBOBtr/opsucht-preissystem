@@ -2513,8 +2513,8 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        // OPVANTIS text-only panel. Uses the existing supported ModMenu
-        // text/filled-rectangle commands; no image or texture registration.
+        // Text/rectangle-only panel: no image texture API is used here.
+        // This keeps the rendering path on the known ModMenu primitives.
         if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
@@ -2528,85 +2528,88 @@ private:
         }
 
         std::vector<pl::modmenu::DrawCommand> commands;
-        commands.reserve(80);
+        commands.reserve(64);
 
-        // Keep the known working placement and dimensions. The visual layout
-        // is redesigned without changing inventory, price, or hook logic.
         constexpr float x = 18.0f;
         constexpr float y = 38.0f;
+        // Keep the current panel width; extend it vertically for 18 item rows.
         constexpr float w = 390.0f;
-        constexpr float h = 430.0f;
-        constexpr float pad = 18.0f;
-        constexpr std::uint32_t bg = 0xE810131B;
-        constexpr std::uint32_t headerBg = 0xF01A1F2B;
-        constexpr std::uint32_t gold = 0xFFF1C875;
-        constexpr std::uint32_t white = 0xFFF0F2F7;
-        constexpr std::uint32_t muted = 0xFF9DA5B8;
-        constexpr std::uint32_t divider = 0xFF343847;
-        constexpr std::uint32_t softGold = 0xFF9C783D;
+        constexpr float h = 650.0f;
+        constexpr float pad = 14.0f;
+        constexpr std::uint32_t bg = 0xE8171921;       // Preserve current dark background.
+        constexpr std::uint32_t white = 0xFFF0F0F0;
+        constexpr std::uint32_t muted = 0xFFB6BBC5;
+        constexpr std::uint32_t violet = 0xFF54247D;   // Dark violet frame.
+        constexpr std::uint32_t divider = 0xFF39234D;  // Subtle violet dividers.
 
-        // Main surface and restrained accent lines.
+        // Single panel surface, with a dark-violet frame and no item boxes.
         drawRect(commands, x, y, w, h, bg);
-        drawRect(commands, x, y, w, 3.0f, gold);
-        drawRect(commands, x, y + h - 2.0f, w, 2.0f, softGold);
-        drawRect(commands, x, y + 3.0f, w, 56.0f, headerBg);
+        drawRect(commands, x, y, w, 3.0f, violet);
+        drawRect(commands, x, y + h - 3.0f, w, 3.0f, violet);
+        drawRect(commands, x, y, 3.0f, h, violet);
+        drawRect(commands, x + w - 3.0f, y, 3.0f, h, violet);
+        drawRect(commands, x + 1.0f, y + 53.0f, w - 2.0f, 1.0f, divider);
+        drawRect(commands, x + 1.0f, y + 91.0f, w - 2.0f, 1.0f, divider);
 
-        // Header: clean typography only, no emoji/icons.
-        drawText(commands, x + pad, y + 9.0f, 23.0f, gold, "OPVANTIS");
-        drawText(commands, x + pad, y + 35.0f, 11.0f, muted, "MARKTWERTE  |  OPSUCHT");
-        drawRect(commands, x + 1.0f, y + 60.0f, w - 2.0f, 1.0f, divider);
+        // Purple gradient title, drawn with ordinary text commands (no image texture).
+        const std::string title = "OPVANTIS";
+        constexpr std::uint32_t titleLight = 0xFFE7C8FF;
+        constexpr std::uint32_t titleDark  = 0xFF7435B0;
+        auto channel = [](std::uint32_t c, int shift) {
+            return static_cast<int>((c >> shift) & 0xFFu);
+        };
+        for (std::size_t i = 0; i < title.size(); ++i) {
+            const float t = title.size() <= 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(title.size() - 1);
+            auto mix = [t](int a, int b) { return static_cast<std::uint32_t>(a + (b - a) * t + 0.5f); };
+            const std::uint32_t color = 0xFF000000u
+                | (mix(channel(titleLight, 16), channel(titleDark, 16)) << 16)
+                | (mix(channel(titleLight, 8), channel(titleDark, 8)) << 8)
+                | mix(channel(titleLight, 0), channel(titleDark, 0));
+            drawText(commands, x + pad + static_cast<float>(i) * 13.0f, y + 10.0f, 19.0f, color, title.substr(i, 1));
+        }
+        drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
 
-        // Inventory value is the primary information block.
-        drawText(commands, x + pad, y + 73.0f, 10.0f, muted, "INVENTARWERT");
-        drawText(commands, x + pad, y + 91.0f, 25.0f, gold, formatMoney(total));
-        drawRect(commands, x + 1.0f, y + 130.0f, w - 2.0f, 1.0f, divider);
+        drawText(commands, x + pad, y + 65.0f, 10.0f, violet, "ITEM");
+        drawText(commands, x + 220.0f, y + 65.0f, 10.0f, violet, "MENGE");
+        drawText(commands, x + 285.0f, y + 65.0f, 10.0f, violet, "PREIS/ST.");
 
-        // Simple column labels; no individual item cards or boxes.
-        drawText(commands, x + pad, y + 142.0f, 10.0f, muted, "AUKTIONSUEBERSICHT");
-        drawText(commands, x + pad, y + 162.0f, 10.0f, softGold, "ITEM");
-        drawText(commands, x + 238.0f, y + 162.0f, 10.0f, softGold, "MENGE");
-        drawText(commands, x + 298.0f, y + 162.0f, 10.0f, softGold, "PREIS/ST.");
-        drawRect(commands, x + 1.0f, y + 179.0f, w - 2.0f, 1.0f, divider);
-
-        const float firstRow = y + 192.0f;
+        const float firstRow = y + 105.0f;
         constexpr float rowH = 20.0f;
-        constexpr std::size_t maxRows = 8;
+        constexpr std::size_t maxRows = 18;
         if (entries.empty()) {
-            drawText(commands, x + pad, firstRow, 13.0f, white, "Inventar wird gelesen...");
+            drawText(commands, x + pad, firstRow, 12.0f, white, "Inventar wird gelesen...");
         } else {
             const std::size_t shown = std::min<std::size_t>(entries.size(), maxRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& entry = entries[i];
                 std::string name = entry.name.empty() ? "Unbekannt" : entry.name;
-                if (name.size() > 22) name = name.substr(0, 19) + "...";
+                if (name.size() > 23) name = name.substr(0, 20) + "...";
                 const float rowY = firstRow + static_cast<float>(i) * rowH;
-                drawText(commands, x + pad, rowY, 13.0f, white, name);
+                drawText(commands, x + pad, rowY, 11.0f, white, name);
 
                 std::ostringstream amount;
                 amount << entry.amount;
-                drawText(commands, x + 244.0f, rowY, 13.0f, white, amount.str());
+                drawText(commands, x + 224.0f, rowY, 11.0f, white, amount.str());
 
                 const std::string price = entry.unitPrice > 0.0 ? formatMoney(entry.unitPrice) : "-";
-                drawText(commands, x + 298.0f, rowY, 12.0f,
-                         entry.unitPrice > 0.0 ? gold : muted, price);
-                if (i + 1 < shown) {
-                    drawRect(commands, x + pad, rowY + 17.0f, w - pad * 2.0f, 1.0f, divider);
-                }
+                drawText(commands, x + 285.0f, rowY, 11.0f,
+                         entry.unitPrice > 0.0 ? titleLight : muted, price);
             }
             if (entries.size() > maxRows) {
                 std::ostringstream more;
                 more << "+ " << (entries.size() - maxRows) << " weitere Items";
-                drawText(commands, x + pad, firstRow + maxRows * rowH, 10.0f, muted, more.str());
+                drawText(commands, x + pad, firstRow + maxRows * rowH, 9.0f, muted, more.str());
             }
         }
 
-        // Compact footer/status line, visually separate from the item list.
-        const float footerY = y + h - 31.0f;
-        drawRect(commands, x + 1.0f, footerY - 10.0f, w - 2.0f, 1.0f, divider);
-        drawText(commands, x + pad, footerY, 10.0f, muted, "BEWERTETE EINTRAEGE");
+        const float footerY = y + h - 56.0f;
+        drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
+        drawText(commands, x + pad, footerY, 9.0f, muted, "GESAMTWERT DES INVENTARS");
+        drawText(commands, x + pad, footerY + 17.0f, 17.0f, titleLight, formatMoney(total));
+
         std::ostringstream status;
-        status << pricedItems;
-        drawText(commands, x + w - 58.0f, footerY, 12.0f, gold, status.str());
+        status << pricedItems << " bewertete Eintraege";
+        drawText(commands, x + 220.0f, footerY + 20.0f, 9.0f, muted, status.str());
 
         pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
     }
