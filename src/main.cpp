@@ -1454,7 +1454,7 @@ public:
                 mSelf.getId()
             )
             .description(
-                "Zeigt den aktuellen Wert des geöffneten Inventars anhand der OPSUCHT-Auktionspreise."
+                "Test 18: Panel wird nur bei ScreenStateEvent Container/Opened angezeigt."
             )
             .defaultEnabled(true)
             .onToggle(
@@ -1637,8 +1637,7 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerOpenCalls.fetch_add(1);
-            self->addDiagLog("Container OPEN hook");
-            self->mInventoryOpen.store(true);
+            self->addDiagLog("Container OPEN hook (Hook allein setzt Status nicht)");
             self->mUiPanelDrawnThisFrame.store(false);
         }
         return sOriginalContainerOpen ? sOriginalContainerOpen(a0, a1, a2, a3, a4, a5, a6, a7) : nullptr;
@@ -1648,8 +1647,7 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerCloseCalls.fetch_add(1);
-            self->addDiagLog("Container CLOSE hook");
-            self->mInventoryOpen.store(false);
+            self->addDiagLog("Container CLOSE hook (Hook allein setzt Status nicht)");
             self->mUiPanelDrawnThisFrame.store(false);
         }
         return sOriginalContainerDtor ? sOriginalContainerDtor(a0, a1, a2, a3, a4, a5, a6, a7) : nullptr;
@@ -1777,8 +1775,8 @@ private:
                         event.phase == bedrocktools::events::ScreenPhase::Opened;
 
                     self->mInventoryOpen.store(open);
-                    // Der Screen-State beeinflusst die Anzeige nicht mehr. Die Inventardaten
-                    // werden unabhängig davon dauerhaft aktualisiert.
+                    self->mUiPanelDrawnThisFrame.store(false);
+                    self->addDiagLog(open ? "PANEL-STATUS: OPENED event" : "PANEL-STATUS: CLOSED event");
                 },
                 this
             );
@@ -2577,9 +2575,10 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        // Text/rectangle-only panel: no image texture API is used here.
-        // This keeps the rendering path on the known ModMenu primitives.
-        if (!mEnabled.load()) return;
+        // Test 18: Panel nur zeigen, wenn BedrockTools ScreenStateEvent
+        // einen geöffneten Container meldet. Die direkten Kisten-Hooks
+        // protokollieren weiterhin, setzen den Status aber nicht mehr selbst.
+        if (!mEnabled.load() || !mInventoryOpen.load()) return;
 
         std::vector<InventoryEntry> entries;
         double total = 0.0;
