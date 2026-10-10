@@ -7,6 +7,7 @@
 #include <bedrocktools/BedrockTools.hpp>
 #include <bedrocktools/Api.hpp>
 #include <bedrocktools/events/Events.hpp>
+#include "frame_data.h"
 
 #include <jni.h>
 
@@ -2512,9 +2513,6 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        // Render background + text in ONE ModMenu command list. Mixing a ModMenu
-        // rectangle with native drawText caused the rectangle to be composited
-        // later and cover the text completely.
         if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
@@ -2528,102 +2526,57 @@ private:
         }
 
         std::vector<pl::modmenu::DrawCommand> commands;
-        commands.reserve(80);
+        // The original PNG is pre-rasterized into compact horizontal runs.
+        // This avoids loading files or decoding PNG data on the render thread.
+        commands.reserve(opvantis_frame::kRunCount + 70);
 
         constexpr float x = 18.0f;
-        constexpr float y = 42.0f;
+        constexpr float y = 24.0f;
         constexpr float w = 448.0f;
-        constexpr float h = 668.0f;
-        constexpr float pad = 16.0f;
+        constexpr float h = w * 920.0f / 712.0f;
+        const float px = w / static_cast<float>(opvantis_frame::kWidth);
+        const float py = h / static_cast<float>(opvantis_frame::kHeight);
+        for (const auto& run : opvantis_frame::kRuns) {
+            drawRect(commands,
+                     x + static_cast<float>(run.x) * px,
+                     y + static_cast<float>(run.y) * py,
+                     static_cast<float>(run.length) * px + 0.25f,
+                     py + 0.25f,
+                     run.color);
+        }
 
-        drawRect(commands, x, y, w, h, 0xE81A1E24);
-        drawRect(commands, x, y, w, 3.0f, 0xFFFFB52E);
-        drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFFFFB52E);
-        drawRect(commands, x + 1.0f, y + 48.0f, w - 2.0f, 1.0f, 0xFF6B5425);
-        drawRect(commands, x + 1.0f, y + 101.0f, w - 2.0f, 1.0f, 0xFF6B5425);
+        // The frame artwork already contains the logo, row numbers, separators,
+        // dollar signs and total-value footer. Overlay only the live values.
+        constexpr std::size_t maxRows = 18;
+        const float firstRow = y + h * (184.0f / 920.0f);
+        const float rowH = h * (33.3f / 920.0f);
+        for (std::size_t i = 0; i < std::min<std::size_t>(entries.size(), maxRows); ++i) {
+            std::string name = entries[i].name.empty() ? "Unbekannt" : entries[i].name;
+            if (name.size() > 22) name = name.substr(0, 19) + "...";
+            const float rowY = firstRow + static_cast<float>(i) * rowH;
+            drawText(commands, x + w * (0.215f), rowY, 10.0f, 0xFFF1F1F1, name);
 
-        drawText(commands, x + pad, y + 12.0f, 18.0f, 0xFFFFC94A, "OPSUCHT INVENTARWERT");
-        drawText(commands, x + pad, y + 32.0f, 11.0f, 0xFFE4E4E4,
-                 "OPSUCHT Durchschnittspreis pro Stueck");
+            std::ostringstream amount;
+            amount << entries[i].amount;
+            drawText(commands, x + w * (0.735f), rowY, 10.0f, 0xFFE8E8E8, amount.str());
 
-        drawText(commands, x + pad, y + 62.0f, 11.0f, 0xFFD0D0D0,
-                 "UI-Test: Netzwerk deaktiviert");
-
-        drawText(commands, x + pad, y + 82.0f, 11.0f, 0xFFFFD56A, "ITEM");
-        drawText(commands, x + 245.0f, y + 82.0f, 11.0f, 0xFFFFD56A, "MENGE");
-        drawText(commands, x + 318.0f, y + 82.0f, 11.0f, 0xFFFFD56A, "OE-WERT");
-
-        const float firstRow = y + 118.0f;
-        const float rowH = 23.0f;
-        // The panel has enough vertical room for 18 compact rows without
-        // covering the fixed total-value footer.
-        const std::size_t maxRows = 18;
+            const std::string price = entries[i].unitPrice > 0.0 ? formatMoney(entries[i].unitPrice) : "-";
+            drawText(commands, x + w * (0.825f), rowY, 10.0f,
+                     entries[i].unitPrice > 0.0 ? 0xFFFFD45A : 0xFF999999, price);
+        }
         if (entries.empty()) {
-            drawText(commands, x + pad, firstRow, 12.0f, 0xFFE8E8E8,
+            drawText(commands, x + w * 0.22f, firstRow, 10.0f, 0xFFE8E8E8,
                      "Inventar wird gelesen...");
-            drawText(commands, x + pad, firstRow + 23.0f, 10.0f, 0xFF9E9E9E,
-                     "Warte auf die Inventardaten des Spielers.");
-        } else {
-            const std::size_t shown = std::min<std::size_t>(entries.size(), maxRows);
-            for (std::size_t i = 0; i < shown; ++i) {
-                std::string name = entries[i].name.empty() ? "Unbekannt" : entries[i].name;
-                if (name.size() > 27) name = name.substr(0, 24) + "...";
-                drawText(commands, x + pad, firstRow + i * rowH, 11.0f, 0xFFF1F1F1, name);
-
-                std::ostringstream amount;
-                amount << entries[i].amount;
-                drawText(commands, x + 248.0f, firstRow + i * rowH, 11.0f, 0xFFE8E8E8, amount.str());
-
-                const std::string price = entries[i].unitPrice > 0.0 ? formatMoney(entries[i].unitPrice) : "-";
-                drawText(commands, x + 318.0f, firstRow + i * rowH, 11.0f,
-                         entries[i].unitPrice > 0.0 ? 0xFFFFC94A : 0xFF888888, price);
-            }
-            if (entries.size() > maxRows) {
-                std::ostringstream more;
-                more << "+ " << (entries.size() - maxRows) << " weitere Items | Gesamtwert nutzt alle Slots";
-                drawText(commands, x + pad, firstRow + maxRows * rowH + 2.0f, 10.0f, 0xFFAAAAAA, more.str());
-            }
+        }
+        if (entries.size() > maxRows) {
+            drawText(commands, x + w * 0.22f, y + h * 0.84f, 9.0f, 0xFFE8E8E8,
+                     "+ weitere Items im Inventar");
         }
 
-        // Show the first non-empty ItemStack's raw identity evidence.
-        // This is intentionally a diagnostic view; it does not claim that a
-        // visible name is the real OPSUCHT market identity.
-        std::string inspectorText;
-        for (const auto& e : entries) {
-            if (!e.debugDetails.empty()) {
-                inspectorText = e.debugDetails;
-                break;
-            }
-        }
-        if (false && !inspectorText.empty()) {
-            const float iy = y + 430.0f;
-            drawRect(commands, x + 1.0f, iy - 10.0f, w - 2.0f, 94.0f, 0xB81A1A1F);
-            drawText(commands, x + pad, iy, 10.0f, 0xFFFFC94A, "RAW ITEMSTACK DIAGNOSE");
-            // Split at the candidate separators so long custom names remain readable.
-            std::string line = inspectorText;
-            if (line.size() > 78) line.resize(78);
-            drawText(commands, x + pad, iy + 18.0f, 8.0f, 0xFFE0E0E0, line);
-            std::ostringstream hint;
-            hint << "c0-c5 = erkannte String-Quellen | bytes = Stack-Fingerprint";
-            drawText(commands, x + pad, iy + 34.0f, 8.0f, 0xFFAAAAAA, hint.str());
-            if (inspectorText.size() > 78) {
-                std::string line2 = inspectorText.substr(78, 78);
-                drawText(commands, x + pad, iy + 49.0f, 8.0f, 0xFFE0E0E0, line2);
-            }
-            if (inspectorText.size() > 156) {
-                std::string line3 = inspectorText.substr(156, 78);
-                drawText(commands, x + pad, iy + 64.0f, 8.0f, 0xFFE0E0E0, line3);
-            }
-        }
-
-        const float footerY = y + h - 76.0f;
-        drawRect(commands, x + 1.0f, footerY - 12.0f, w - 2.0f, 1.0f, 0xFF6B5425);
-        drawText(commands, x + pad, footerY, 13.0f, 0xFFE7E7E7, "GESAMTWERT:");
-        drawText(commands, x + 116.0f, footerY, 15.0f, 0xFFFFC94A, formatMoney(total));
-
+        drawText(commands, x + w * 0.49f, y + h * 0.905f, 13.0f, 0xFFFFD45A, formatMoney(total));
         std::ostringstream count;
-        count << "Bewertet: " << pricedItems << " Items";
-        drawText(commands, x + pad, footerY + 25.0f, 10.0f, 0xFFAAAAAA, count.str());
+        count << pricedItems << " bewertet";
+        drawText(commands, x + w * 0.22f, y + h * 0.955f, 8.0f, 0xFFCCCCCC, count.str());
 
         pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
     }
