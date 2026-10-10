@@ -1617,7 +1617,6 @@ private:
             // HUD text pass; relying only on drawText therefore made the panel
             // disappear exactly when the inventory was opened.
             if (self->mEnabled.load() &&
-                self->mInventoryOpen.load() &&
                 sLastUiContext &&
                 sLastTextMeasure &&
                 sLastCaretMeasure &&
@@ -1629,8 +1628,6 @@ private:
                     sLastCaretMeasure
                 );
             }
-            // Test 13 diagnostic: this small panel is independent of inventory state.
-            if (self->mEnabled.load()) self->drawDiagnosticOverlay();
         }
         if (sOriginalTick) sOriginalTick(actor);
     }
@@ -2557,7 +2554,7 @@ private:
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
         // Text/rectangle-only panel: no image texture API is used here.
         // This keeps the rendering path on the known ModMenu primitives.
-        if (!mEnabled.load() || !mInventoryOpen.load()) return;
+        if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
         double total = 0.0;
@@ -2576,7 +2573,7 @@ private:
         constexpr float y = 38.0f;
         // Keep the current panel width; extend it vertically for 18 item rows.
         constexpr float w = 390.0f;
-        constexpr float h = 650.0f;
+        constexpr float h = 790.0f;
         constexpr float pad = 14.0f;
         constexpr std::uint32_t bg = 0xE8171921;       // Preserve current dark background.
         constexpr std::uint32_t white = 0xFFF0F0F0;
@@ -2643,6 +2640,24 @@ private:
                 drawText(commands, x + pad, firstRow + maxRows * rowH, 9.0f, muted, more.str());
             }
         }
+
+        // Test 13/14 diagnostics are embedded inside the main panel.
+        // The panel itself remains visible whether the inventory is open or closed.
+        const float diagY = y + 500.0f;
+        drawRect(commands, x + 1.0f, diagY - 8.0f, w - 2.0f, 1.0f, divider);
+        drawText(commands, x + pad, diagY, 10.0f, titleLight, "DIAGNOSE (TEST) ");
+        auto diagLine = [&](int row, const std::string& label, const std::string& value) {
+            drawText(commands, x + pad, diagY + 18.0f + row * 15.0f, 8.0f, muted, label);
+            drawText(commands, x + 205.0f, diagY + 18.0f + row * 15.0f, 8.0f, white, value);
+        };
+        diagLine(0, "Inventarstatus:", mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN");
+        diagLine(1, "Screen-Events / Typ:", std::to_string(mScreenEvents.load()) + " / " + std::to_string(mLastScreenKind.load()));
+        diagLine(2, "Screen-Phase:", std::to_string(mLastScreenPhase.load()));
+        diagLine(3, "Container-Events:", std::to_string(mContainerScreenEvents.load()));
+        diagLine(4, "Andere Screen-Events:", std::to_string(mNonContainerScreenEvents.load()));
+        diagLine(5, "Open/Close-Hooks:", std::to_string(mContainerOpenCalls.load()) + " / " + std::to_string(mContainerCloseCalls.load()));
+        diagLine(6, "Text-Aufrufe / Treffer:", std::to_string(mDrawTextCalls.load()) + " / " + std::to_string(mInventoryLabelHits.load()));
+        diagLine(7, "Slots / Preis-Treffer:", std::to_string(mDiagSlots.load()) + " / " + std::to_string(mDiagPriceMatches.load()));
 
         const float footerY = y + h - 56.0f;
         drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
