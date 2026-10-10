@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(opsucht_inventarwert LANGUAGES CXX)
+project(opvantis LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,13 +36,13 @@ FetchContent_MakeAvailable(bedrocktools)
 # ============================================================
 
 add_library(
-    opsucht_inventarwert
+    opvantis
     SHARED
     src/main.cpp
 )
 
 target_include_directories(
-    opsucht_inventarwert
+    opvantis
     PRIVATE
     ${bedrocktools_SOURCE_DIR}/include
     ${bedrocktools_SOURCE_DIR}/src
@@ -50,13 +50,13 @@ target_include_directories(
 )
 
 target_link_libraries(
-    opsucht_inventarwert
+    opvantis
     PRIVATE
     preloader
 )
 
 target_compile_options(
-    opsucht_inventarwert
+    opvantis
     PRIVATE
     -Wall
     -Wextra
@@ -65,7 +65,7 @@ target_compile_options(
 )
 
 set_target_properties(
-    opsucht_inventarwert
+    opvantis
     PROPERTIES
-    OUTPUT_NAME "opsucht_inventarwert"
+    OUTPUT_NAME "opvantis"
 )

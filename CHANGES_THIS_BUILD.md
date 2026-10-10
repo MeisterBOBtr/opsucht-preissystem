@@ -1,10 +1,7 @@
-# OPVANTIS – Änderungen in diesem Paket
+# OPVANTIS UI-Test 1
 
-- Projekt-/Mod-Identität auf OPVANTIS umbenannt.
-- Vorhandenes Rahmenbild `resources/frame.png` beibehalten.
-- Bestehende Inventarauslese, Itemresolver und HUD-Rendering als Ausgangspunkt behalten.
-- Build-Workflow und Artefaktname auf OPVANTIS umgestellt.
+Diese Testversion fokussiert den Inventar-Overlay-Zustand. Sie entschärft die bisherige automatische Rücksetzung des Inventarstatus, wenn einige Frames lang keine Inventar-Textlabels erkannt wurden.
 
-## Noch nicht als erledigt ausgeben
-- Supabase-Abfrage aus `artikel` und `preise` ist in diesem Stand noch nicht angebunden; der Code nutzt weiter die OPSUCHT-Auktions-API.
-- Panel über dem geöffneten Inventar und korrekte Item-/Preiszuordnung benötigen einen Ingame-Test auf Bedrock Tools v26.52.
+Das originale Rahmenbild bleibt als Projektressource erhalten. Die aktuelle DrawCommand-Schnittstelle zeichnet weiterhin Rechtecke und Text, daher ist das Einbinden des PNG-Rahmens als echte Bildfläche noch offen.
+
+Direkte Opsucht-API-Abfragen und die bisherige Preislogik bleiben in diesem Zwischenbuild noch unverändert, damit dieser Test möglichst nur den UI-Zustand betrifft. Die Trennung auf Supabase-Read-only erfolgt nach dem UI-Test.
