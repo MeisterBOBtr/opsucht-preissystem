@@ -1435,7 +1435,7 @@ public:
     bool load() {
 
         mSelf.getLogger().info(
-            "OPVANTIS geladen"
+            "OPSUCHT Inventarwert geladen"
         );
 
         return true;
@@ -1451,7 +1451,7 @@ public:
         const bool registered =
             pl::modmenu::ModuleBuilder(
                 std::string(kModuleId),
-                "OPVANTIS"
+                "OPSUCHT Inventarwert"
             )
             .modId(
                 mSelf.getId()
@@ -1603,12 +1603,12 @@ private:
                 self->mInventoryTextMissingFrames.store(0);
                 self->mInventoryOpen.store(true);
             } else if (self->mInventoryOpen.load()) {
-                const int missing =
-                    self->mInventoryTextMissingFrames.fetch_add(1) + 1;
-                if (missing >= 4) {
-                    self->mInventoryOpen.store(false);
-                    self->mUiPanelDrawnThisFrame.store(false);
-                }
+                // Do not hide the panel just because inventory labels were not
+                // rendered during a few frames. Bedrock can switch UI passes
+                // while the inventory is opening; the old timeout caused the
+                // panel state to flicker or reset. Screen/container hooks remain
+                // responsible for the actual open/close state.
+                self->mInventoryTextMissingFrames.fetch_add(1);
             }
 
             if (self->mLocalPlayerSubscription == 0) {
@@ -1997,7 +1997,7 @@ private:
 
             if (!playerInventory) {
                 if (++mInventoryReadFailures % 30 == 0) {
-                    mSelf.getLogger().info("OPVANTIS Inventar: PlayerInventory ist null");
+                    mSelf.getLogger().info("OPSUCHT Inventar: PlayerInventory ist null");
                 }
                 return;
             }
