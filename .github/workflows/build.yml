@@ -1,10 +1,8 @@
-
-name: Build OPVANTIS - Inventory Only Test 11
+name: Build OPVANTIS - Inventory Test 12
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -66,17 +64,13 @@ jobs:
           rm -rf template/src/bedrocktools
           rm -rf template/src/entt
           mkdir -p template/src
-
-          cp -r bedrocktools/include/bedrocktools \
-            template/src/
-
-          cp -r entt/single_include/entt \
-            template/src/
-
+          cp -r bedrocktools/include/bedrocktools template/src/
+          cp -r entt/single_include/entt template/src/
           test -f template/src/entt/entt.hpp
 
       - name: Copy OPVANTIS source
         run: |
+          test -f src/main.cpp
           cp src/main.cpp template/src/main.cpp
 
       - name: Configure mod information
@@ -116,9 +110,9 @@ jobs:
         run: |
           pwsh ./scripts/package.ps1 -Abi arm64-v8a
 
-      - name: Upload LeviPack
+      - name: Upload OPVANTIS Test 12
         uses: actions/upload-artifact@v4
         with:
-          name: opvantis-inventory-only-test-11
+          name: OPVANTIS-Test12
           path: template/build-arm64-v8a/*.levipack
           if-no-files-found: error
