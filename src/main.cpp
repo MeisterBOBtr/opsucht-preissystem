@@ -1742,16 +1742,31 @@ private:
                     const auto& event =
                         *static_cast<bedrocktools::events::ScreenStateEvent*>(payload);
 
-                    if (event.screen != bedrocktools::events::ScreenKind::Container) {
-                        return;
-                    }
-
+                    // TEST 12: Diagnose-Fallback. Nicht nur Container akzeptieren:
+                    // manche Bedrock-Versionen melden das Spielerinventar unter einem
+                    // anderen ScreenKind. Protokolliere den gemeldeten Typ und die Phase.
                     const bool open =
                         event.phase == bedrocktools::events::ScreenPhase::Opened;
+                    const bool closed =
+                        event.phase == bedrocktools::events::ScreenPhase::Closed;
 
-                    self->mInventoryOpen.store(open);
-                    // Der Screen-State beeinflusst die Anzeige nicht mehr. Die Inventardaten
-                    // werden unabhängig davon dauerhaft aktualisiert.
+                    self->mSelf.getLogger().info(
+                        "OPVANTIS TEST12 ScreenStateEvent: screen={} phase={} open={} closed={}",
+                        static_cast<int>(event.screen),
+                        static_cast<int>(event.phase),
+                        open,
+                        closed
+                    );
+
+                    // Test 12 akzeptiert vorübergehend alle ScreenKinds. Dadurch
+                    // prüfen wir, ob der bisherige Container-Filter die Anzeige
+                    // verhindert hat. Wenn ein beliebiger Bildschirm geöffnet wird,
+                    // ist das Panel sichtbar; beim Schließen wird es ausgeblendet.
+                    if (open) {
+                        self->mInventoryOpen.store(true);
+                    } else if (closed) {
+                        self->mInventoryOpen.store(false);
+                    }
                 },
                 this
             );
