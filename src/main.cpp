@@ -1688,6 +1688,20 @@ private:
                 self->mInventoryTextSeenThisFrame.store(true);
                 self->mInventoryTextMissingFrames.store(0);
                 self->mInventoryOpen.store(true);
+                std::string clipped = uiText.substr(0, 48);
+                self->addDiagLog(std::string("UI-TEXT: ") + clipped);
+            } else if (
+                uiText.find("chest") != std::string::npos ||
+                uiText.find("truhe") != std::string::npos ||
+                uiText.find("container") != std::string::npos ||
+                uiText.find("take half") != std::string::npos ||
+                uiText.find("nehmen") != std::string::npos ||
+                uiText.find("craft") != std::string::npos ||
+                uiText.find("recipe") != std::string::npos ||
+                uiText.find("search") != std::string::npos ||
+                uiText.find("suchen") != std::string::npos
+            ) {
+                self->addDiagLog(std::string("UI-TEXT: ") + uiText.substr(0, 48));
             }
         }
 
@@ -2542,7 +2556,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
-        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T16");
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T17");
         auto line = [&](int row, const std::string& label, const std::string& value) {
             drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
             drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
@@ -2629,30 +2643,33 @@ private:
         drawText(commands, x + pad, y + 73.0f, 8.0f, muted,
                  "HOOK OPEN/CLOSE: " + std::to_string(mContainerOpenCalls.load()) +
                  "/" + std::to_string(mContainerCloseCalls.load()));
-        drawText(commands, x + pad, y + 85.0f, 8.0f, titleLight, "PROTOKOLL:");
+        drawText(commands, x + pad, y + 85.0f, 8.0f, muted,
+                 "TEXT-HOOKS: " + std::to_string(mDrawTextCalls.load()) +
+                 "  UI-TREFFER: " + std::to_string(mInventoryLabelHits.load()));
+        drawText(commands, x + pad, y + 97.0f, 8.0f, titleLight, "PROTOKOLL:");
         std::vector<std::string> topLogCopy;
         {
             std::lock_guard<std::mutex> lock(mDiagLogMutex);
             topLogCopy = mDiagLog;
         }
         if (topLogCopy.empty()) {
-            drawText(commands, x + pad + 70.0f, y + 85.0f, 8.0f, muted, "Noch keine Ereignisse");
+            drawText(commands, x + pad + 70.0f, y + 97.0f, 8.0f, muted, "Noch keine Ereignisse");
         } else {
             const auto& latest = topLogCopy.back();
             const std::string clipped = latest.size() > 42 ? latest.substr(0, 39) + "..." : latest;
-            drawText(commands, x + pad + 70.0f, y + 85.0f, 8.0f, white, clipped);
+            drawText(commands, x + pad + 70.0f, y + 97.0f, 8.0f, white, clipped);
             if (topLogCopy.size() > 1) {
                 const auto& previous = topLogCopy[topLogCopy.size() - 2];
                 const std::string clippedPrevious = previous.size() > 42 ? previous.substr(0, 39) + "..." : previous;
-                drawText(commands, x + pad, y + 98.0f, 7.0f, muted, clippedPrevious);
+                drawText(commands, x + pad, y + 109.0f, 7.0f, muted, clippedPrevious);
             }
         }
 
-        drawText(commands, x + pad, y + 106.0f, 10.0f, violet, "ITEM");
-        drawText(commands, x + 220.0f, y + 106.0f, 10.0f, violet, "MENGE");
-        drawText(commands, x + 285.0f, y + 106.0f, 10.0f, violet, "PREIS/ST.");
+        drawText(commands, x + pad, y + 120.0f, 10.0f, violet, "ITEM");
+        drawText(commands, x + 220.0f, y + 120.0f, 10.0f, violet, "MENGE");
+        drawText(commands, x + 285.0f, y + 120.0f, 10.0f, violet, "PREIS/ST.");
 
-        const float firstRow = y + 132.0f;
+        const float firstRow = y + 146.0f;
         constexpr float rowH = 20.0f;
         constexpr std::size_t maxRows = 18;
         if (entries.empty()) {
