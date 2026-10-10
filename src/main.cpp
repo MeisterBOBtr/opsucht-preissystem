@@ -1695,10 +1695,9 @@ private:
         // every drawText call, which caused the panel to duplicate and flicker.
         // Drawing after the inventory screen's own text is seen gives the panel
         // a late, stable place in the same safe drawText pass.
-        // Test 11: Panel nur anzeigen, wenn der Inventar-/Screen-State offen ist.
-        // Die Inventarauslese läuft unabhängig davon weiter; nur das Zeichnen
-        // wird auf das geöffnete Inventar begrenzt.
-        if (self && self->mEnabled.load() && self->mInventoryOpen.load() &&
+        // Test 16: Keep panel drawing independent of inventory state. This
+        // ensures the on-panel event log remains visible after closing UI.
+        if (self && self->mEnabled.load() &&
             !self->mUiPanelDrawnThisFrame.exchange(true)) {
             self->drawDirectInventoryOverlayWithArgs(ctx, font, textData, caretData);
         }
@@ -2543,7 +2542,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
-        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T15");
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T16");
         auto line = [&](int row, const std::string& label, const std::string& value) {
             drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
             drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
@@ -2599,8 +2598,7 @@ private:
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, violet);
         drawRect(commands, x, y, 3.0f, h, violet);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, violet);
-        drawRect(commands, x + 1.0f, y + 53.0f, w - 2.0f, 1.0f, divider);
-        drawRect(commands, x + 1.0f, y + 91.0f, w - 2.0f, 1.0f, divider);
+        drawRect(commands, x + 1.0f, y + 118.0f, w - 2.0f, 1.0f, divider);
 
         // Purple gradient title, drawn with ordinary text commands (no image texture).
         const std::string title = "OPVANTIS";
@@ -2620,11 +2618,41 @@ private:
         }
         drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
 
-        drawText(commands, x + pad, y + 65.0f, 10.0f, violet, "ITEM");
-        drawText(commands, x + 220.0f, y + 65.0f, 10.0f, violet, "MENGE");
-        drawText(commands, x + 285.0f, y + 65.0f, 10.0f, violet, "PREIS/ST.");
+        // Compact diagnostic block moved to the top so it is visible on mobile.
+        drawText(commands, x + pad, y + 49.0f, 8.0f, titleLight,
+                 std::string("STATUS: ") + (mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN") +
+                 "  TICKS: " + std::to_string(mDiagTicks.load()));
+        drawText(commands, x + pad, y + 61.0f, 8.0f, muted,
+                 "SCREEN: " + std::to_string(mScreenEvents.load()) +
+                 " TYPE: " + std::to_string(mLastScreenKind.load()) +
+                 " PHASE: " + std::to_string(mLastScreenPhase.load()));
+        drawText(commands, x + pad, y + 73.0f, 8.0f, muted,
+                 "HOOK OPEN/CLOSE: " + std::to_string(mContainerOpenCalls.load()) +
+                 "/" + std::to_string(mContainerCloseCalls.load()));
+        drawText(commands, x + pad, y + 85.0f, 8.0f, titleLight, "PROTOKOLL:");
+        std::vector<std::string> topLogCopy;
+        {
+            std::lock_guard<std::mutex> lock(mDiagLogMutex);
+            topLogCopy = mDiagLog;
+        }
+        if (topLogCopy.empty()) {
+            drawText(commands, x + pad + 70.0f, y + 85.0f, 8.0f, muted, "Noch keine Ereignisse");
+        } else {
+            const auto& latest = topLogCopy.back();
+            const std::string clipped = latest.size() > 42 ? latest.substr(0, 39) + "..." : latest;
+            drawText(commands, x + pad + 70.0f, y + 85.0f, 8.0f, white, clipped);
+            if (topLogCopy.size() > 1) {
+                const auto& previous = topLogCopy[topLogCopy.size() - 2];
+                const std::string clippedPrevious = previous.size() > 42 ? previous.substr(0, 39) + "..." : previous;
+                drawText(commands, x + pad, y + 98.0f, 7.0f, muted, clippedPrevious);
+            }
+        }
 
-        const float firstRow = y + 105.0f;
+        drawText(commands, x + pad, y + 106.0f, 10.0f, violet, "ITEM");
+        drawText(commands, x + 220.0f, y + 106.0f, 10.0f, violet, "MENGE");
+        drawText(commands, x + 285.0f, y + 106.0f, 10.0f, violet, "PREIS/ST.");
+
+        const float firstRow = y + 132.0f;
         constexpr float rowH = 20.0f;
         constexpr std::size_t maxRows = 18;
         if (entries.empty()) {
@@ -2653,41 +2681,8 @@ private:
             }
         }
 
-        // Test 13/14 diagnostics are embedded inside the main panel.
-        // The panel itself remains visible whether the inventory is open or closed.
-        const float diagY = y + 500.0f;
-        drawRect(commands, x + 1.0f, diagY - 8.0f, w - 2.0f, 1.0f, divider);
-        drawText(commands, x + pad, diagY, 10.0f, titleLight, "DIAGNOSE (TEST 15) ");
-        auto diagLine = [&](int row, const std::string& label, const std::string& value) {
-            drawText(commands, x + pad, diagY + 18.0f + row * 15.0f, 8.0f, muted, label);
-            drawText(commands, x + 205.0f, diagY + 18.0f + row * 15.0f, 8.0f, white, value);
-        };
-        diagLine(0, "Inventarstatus:", mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN");
-        diagLine(1, "Screen-Events / Typ:", std::to_string(mScreenEvents.load()) + " / " + std::to_string(mLastScreenKind.load()));
-        diagLine(2, "Screen-Phase:", std::to_string(mLastScreenPhase.load()));
-        diagLine(3, "Container-Events:", std::to_string(mContainerScreenEvents.load()));
-        diagLine(4, "Andere Screen-Events:", std::to_string(mNonContainerScreenEvents.load()));
-        diagLine(5, "Open/Close-Hooks:", std::to_string(mContainerOpenCalls.load()) + " / " + std::to_string(mContainerCloseCalls.load()));
-        diagLine(6, "Text-Aufrufe / Treffer:", std::to_string(mDrawTextCalls.load()) + " / " + std::to_string(mInventoryLabelHits.load()));
-        diagLine(7, "Slots / Preis-Treffer:", std::to_string(mDiagSlots.load()) + " / " + std::to_string(mDiagPriceMatches.load()));
-
-        const float logY = diagY + 145.0f;
-        drawText(commands, x + pad, logY, 9.0f, titleLight, "EREIGNISVERLAUF (NEUESTE ZUERST)");
-        std::vector<std::string> logCopy;
-        {
-            std::lock_guard<std::mutex> lock(mDiagLogMutex);
-            logCopy = mDiagLog;
-        }
-        if (logCopy.empty()) {
-            drawText(commands, x + pad, logY + 15.0f, 8.0f, muted, "Noch keine Ereignisse empfangen");
-        } else {
-            const std::size_t count = std::min<std::size_t>(5, logCopy.size());
-            for (std::size_t i = 0; i < count; ++i) {
-                const std::string& msg = logCopy[logCopy.size() - 1 - i];
-                std::string clipped = msg.size() > 48 ? msg.substr(0, 45) + "..." : msg;
-                drawText(commands, x + pad, logY + 15.0f + static_cast<float>(i) * 12.0f, 7.0f, muted, clipped);
-            }
-        }
+        // Test 16: detailed diagnostic counters and the event log are placed
+        // at the top of the panel (above the item list), not below the fold.
 
         const float footerY = y + h - 56.0f;
         drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
