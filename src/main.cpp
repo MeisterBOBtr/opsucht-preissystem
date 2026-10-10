@@ -716,27 +716,23 @@ class OpsuchtApi {
 
 public:
 
-    void start(
-        ll::mod::NativeMod& self
-    ) {
-
+    // OPVANTIS UI/performance test: no networking is started here.
+    // The mod must not poll the OPSUCHT API. Supabase read-only loading will
+    // be added as a separate step after the UI/rendering behavior is stable.
+    void start(ll::mod::NativeMod& self) {
         stop();
-
         mSelf = &self;
-        mStop = false;
-
-        mThread =
-            std::thread(
-                [this] {
-                    worker();
-                }
+        mStop = true;
+        if (mSelf) {
+            mSelf->getLogger().info(
+                "OPVANTIS UI-Test: direkte Opsucht-API-Abfragen deaktiviert"
             );
+        }
     }
 
     void stop() {
-
         mStop = true;
-
+        // No background worker is started in this build.
         if (mThread.joinable()) {
             mThread.join();
         }
@@ -2550,9 +2546,8 @@ private:
         drawText(commands, x + pad, y + 32.0f, 11.0f, 0xFFE4E4E4,
                  "OPSUCHT Durchschnittspreis pro Stueck");
 
-        std::ostringstream api;
-        api << "Auktionen: " << mApi.apiAuctionCount() << " | Preise: " << mApi.priceCount() << " | Kat.: " << mApi.apiCategoryCount();
-        drawText(commands, x + pad, y + 62.0f, 11.0f, 0xFFD0D0D0, api.str());
+        drawText(commands, x + pad, y + 62.0f, 11.0f, 0xFFD0D0D0,
+                 "UI-Test: Netzwerk deaktiviert");
 
         drawText(commands, x + pad, y + 82.0f, 11.0f, 0xFFFFD56A, "ITEM");
         drawText(commands, x + 245.0f, y + 82.0f, 11.0f, 0xFFFFD56A, "MENGE");
