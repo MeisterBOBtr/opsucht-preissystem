@@ -25,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -1444,6 +1445,7 @@ public:
         mStop = false;
 
         registerFont();
+        registerFrameImage();
 
         const bool registered =
             pl::modmenu::ModuleBuilder(
@@ -2503,6 +2505,21 @@ private:
         );
     }
 
+    bool registerFrameImage() {
+        static const std::string imageId = "opvantis.original_frame";
+        const bool ok = pl::modmenu::registerImage(
+            imageId,
+            std::span<const unsigned char>(
+                reinterpret_cast<const unsigned char*>(opvantis_frame::kRgba),
+                opvantis_frame::kRgbaSize
+            ),
+            opvantis_frame::kWidth,
+            opvantis_frame::kHeight
+        );
+        mSelf.getLogger().info("OPVANTIS Originalrahmen-Textur: {}", ok ? "OK" : "FEHLER");
+        return ok;
+    }
+
     void drawNativePanelAfterScreen(void*) {}
 
     static OpsuchtRectangleArea makePanelRect(float left, float top, float right, float bottom) {
@@ -2526,57 +2543,18 @@ private:
         }
 
         std::vector<pl::modmenu::DrawCommand> commands;
-        // The original PNG is pre-rasterized into compact horizontal runs.
-        // This avoids loading files or decoding PNG data on the render thread.
-        commands.reserve(opvantis_frame::kRunCount + 70);
+        commands.reserve(1);
 
-        constexpr float x = 18.0f;
-        constexpr float y = 24.0f;
-        constexpr float w = 448.0f;
-        constexpr float h = w * 920.0f / 712.0f;
-        const float px = w / static_cast<float>(opvantis_frame::kWidth);
-        const float py = h / static_cast<float>(opvantis_frame::kHeight);
-        for (const auto& run : opvantis_frame::kRuns) {
-            drawRect(commands,
-                     x + static_cast<float>(run.x) * px,
-                     y + static_cast<float>(run.y) * py,
-                     static_cast<float>(run.length) * px + 0.25f,
-                     py + 0.25f,
-                     run.color);
-        }
-
-        // The frame artwork already contains the logo, row numbers, separators,
-        // dollar signs and total-value footer. Overlay only the live values.
-        constexpr std::size_t maxRows = 18;
-        const float firstRow = y + h * (184.0f / 920.0f);
-        const float rowH = h * (33.3f / 920.0f);
-        for (std::size_t i = 0; i < std::min<std::size_t>(entries.size(), maxRows); ++i) {
-            std::string name = entries[i].name.empty() ? "Unbekannt" : entries[i].name;
-            if (name.size() > 22) name = name.substr(0, 19) + "...";
-            const float rowY = firstRow + static_cast<float>(i) * rowH;
-            drawText(commands, x + w * (0.215f), rowY, 10.0f, 0xFFF1F1F1, name);
-
-            std::ostringstream amount;
-            amount << entries[i].amount;
-            drawText(commands, x + w * (0.735f), rowY, 10.0f, 0xFFE8E8E8, amount.str());
-
-            const std::string price = entries[i].unitPrice > 0.0 ? formatMoney(entries[i].unitPrice) : "-";
-            drawText(commands, x + w * (0.825f), rowY, 10.0f,
-                     entries[i].unitPrice > 0.0 ? 0xFFFFD45A : 0xFF999999, price);
-        }
-        if (entries.empty()) {
-            drawText(commands, x + w * 0.22f, firstRow, 10.0f, 0xFFE8E8E8,
-                     "Inventar wird gelesen...");
-        }
-        if (entries.size() > maxRows) {
-            drawText(commands, x + w * 0.22f, y + h * 0.84f, 9.0f, 0xFFE8E8E8,
-                     "+ weitere Items im Inventar");
-        }
-
-        drawText(commands, x + w * 0.49f, y + h * 0.905f, 13.0f, 0xFFFFD45A, formatMoney(total));
-        std::ostringstream count;
-        count << pricedItems << " bewertet";
-        drawText(commands, x + w * 0.22f, y + h * 0.955f, 8.0f, 0xFFCCCCCC, count.str());
+        // Draw the actual original PNG texture as one GPU image command.
+        // No pixel-by-pixel rectangles: this keeps the render path lightweight.
+        pl::modmenu::DrawCommand frame{};
+        frame.type = pl::modmenu::DrawCommandType::Image;
+        frame.x = 18.0f;
+        frame.y = 24.0f;
+        frame.w = 330.0f;
+        frame.h = 330.0f * 920.0f / 712.0f;
+        frame.imageId = "opvantis.original_frame";
+        commands.push_back(std::move(frame));
 
         pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
     }
