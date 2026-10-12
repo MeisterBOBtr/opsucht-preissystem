@@ -2628,8 +2628,11 @@ private:
         pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".diagnostic", commands);
     }
 
-    void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        if (!mEnabled.load()) return;
+    void drawDirectInventoryOverlayWithArgs(void* uiContext, void* font, void* textMeasure, void* caretMeasure) {
+        // TEST 24: intentionally use Minecraft's original drawText function,
+        // not ModMenu submitDrawCommands(), to test whether the overlay is drawn
+        // on top of the inventory UI. This test is text-only by design.
+        if (!mEnabled.load() || !uiContext || !sOriginalDrawText || !font || !textMeasure || !caretMeasure) return;
 
         std::vector<InventoryEntry> entries;
         double total = 0.0;
@@ -2641,92 +2644,36 @@ private:
             pricedItems = mLastPricedItems;
         }
 
-        std::vector<pl::modmenu::DrawCommand> commands;
-        commands.reserve(180);
-        constexpr float y = 38.0f;
-        constexpr float w = 350.0f;
-        constexpr float h = 860.0f;
-        constexpr float pad = 12.0f;
-        constexpr std::uint32_t bg = 0xE8171921;
-        constexpr std::uint32_t white = 0xFFF0F0F0;
-        constexpr std::uint32_t muted = 0xFFB6BBC5;
-        constexpr std::uint32_t violet = 0xFF7435B0;
-        constexpr std::uint32_t titleLight = 0xFFE7C8FF;
-        constexpr std::uint32_t divider = 0xFF39234D;
-        const float leftX = 12.0f;
-        const float rightX = 374.0f;
-
-        auto panelFrame = [&](float x, const std::string& heading) {
-            drawRect(commands, x, y, w, h, bg);
-            drawRect(commands, x, y, w, 3.0f, violet);
-            drawRect(commands, x, y + h - 3.0f, w, 3.0f, violet);
-            drawRect(commands, x, y, 3.0f, h, violet);
-            drawRect(commands, x + w - 3.0f, y, 3.0f, h, violet);
-            drawRect(commands, x + 1.0f, y + 86.0f, w - 2.0f, 1.0f, divider);
-            drawText(commands, x + pad, y + 10.0f, 18.0f, titleLight, "OPVANTIS");
-            drawText(commands, x + pad, y + 33.0f, 9.0f, muted, "AUKTIONSANZEIGE | OPSUCHT");
-            drawText(commands, x + pad, y + 59.0f, 12.0f, violet, heading);
-        };
-
-        // LEFT: player's inventory and the existing price data path.
-        panelFrame(leftX, "SPIELERINVENTAR");
-        drawText(commands, leftX + pad, y + 96.0f, 8.0f, muted,
-                 std::string("STATUS: ") + (mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN") +
-                 "  TICKS: " + std::to_string(mDiagTicks.load()));
-        drawText(commands, leftX + pad, y + 108.0f, 8.0f, muted,
-                 "KISTEN-HOOK: " + std::to_string(mContainerOpenCalls.load()) + "/" +
-                 std::to_string(mContainerCloseCalls.load()));
-        drawText(commands, leftX + pad, y + 130.0f, 10.0f, violet, "ITEM");
-        drawText(commands, leftX + 214.0f, y + 130.0f, 10.0f, violet, "MENGE");
-        drawText(commands, leftX + 274.0f, y + 130.0f, 10.0f, violet, "PREIS/ST.");
-        const float firstRow = y + 154.0f;
-        constexpr float rowH = 20.0f;
-        constexpr std::size_t maxRows = 24;
+        std::ostringstream out;
+        out << "OPVANTIS - INVENTARWERT\n";
+        out << "AUKTIONSANZEIGE | OPSUCHT\n";
+        out << "ITEM                         MENGE       PREIS/ST.\n";
+        out << "-----------------------------------------------\n";
         if (entries.empty()) {
-            drawText(commands, leftX + pad, firstRow, 11.0f, white, "Inventar wird gelesen...");
+            out << "Inventar wird gelesen...\n";
         } else {
-            const std::size_t shown = std::min<std::size_t>(entries.size(), maxRows);
+            const std::size_t shown = std::min<std::size_t>(entries.size(), 18);
             for (std::size_t i = 0; i < shown; ++i) {
-                const auto& entry = entries[i];
-                std::string name = entry.name.empty() ? "Unbekannt" : entry.name;
-                if (name.size() > 21) name = name.substr(0, 18) + "...";
-                const float rowY = firstRow + static_cast<float>(i) * rowH;
-                drawText(commands, leftX + pad, rowY, 10.0f, white, name);
-                drawText(commands, leftX + 218.0f, rowY, 10.0f, white, std::to_string(entry.amount));
-                drawText(commands, leftX + 274.0f, rowY, 10.0f,
-                         entry.unitPrice > 0.0 ? titleLight : muted,
-                         entry.unitPrice > 0.0 ? formatMoney(entry.unitPrice) : "-");
+                std::string name = entries[i].name.empty() ? "Unbekannt" : entries[i].name;
+                if (name.size() > 23) name = name.substr(0, 20) + "...";
+                out << std::left << std::setw(25) << name
+                    << std::right << std::setw(6) << entries[i].amount << "    "
+                    << std::setw(10)
+                    << (entries[i].unitPrice > 0.0 ? formatMoney(entries[i].unitPrice) : "-")
+                    << "\n";
             }
-            if (entries.size() > maxRows)
-                drawText(commands, leftX + pad, firstRow + maxRows * rowH, 8.0f, muted,
-                         "+ " + std::to_string(entries.size() - maxRows) + " weitere Items");
+            if (entries.size() > shown) out << "+ " << (entries.size() - shown) << " weitere Items\n";
         }
-        const float footerY = y + h - 54.0f;
-        drawRect(commands, leftX + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
-        drawText(commands, leftX + pad, footerY, 9.0f, muted, "GESAMTWERT DES INVENTARS");
-        drawText(commands, leftX + pad, footerY + 17.0f, 16.0f, titleLight, formatMoney(total));
-        drawText(commands, leftX + 205.0f, footerY + 20.0f, 8.0f, muted,
-                 std::to_string(pricedItems) + " bewertet");
+        out << "-----------------------------------------------\n";
+        out << "GESAMTWERT: " << formatMoney(total) << "\n";
+        out << "BEWERTETE ITEMS: " << pricedItems << "\n";
+        out << "TEST 24: DIREKTER TEXT-RENDERWEG";
 
-        // RIGHT: only a screen/hook test. BedrockTools' generic Container hook
-        // does not expose chest slots, so this deliberately does NOT pretend to
-        // display chest items or prices until a verified slot-access path exists.
-        if (mContainerVisible.load()) {
-            panelFrame(rightX, "GEÖFFNETE KISTE");
-            drawText(commands, rightX + pad, y + 99.0f, 10.0f, titleLight, "KISTEN-HOOK: ERKANNT");
-            drawText(commands, rightX + pad, y + 120.0f, 9.0f, muted,
-                     "OPEN: " + std::to_string(mContainerOpenCalls.load()));
-            drawText(commands, rightX + pad, y + 137.0f, 9.0f, muted,
-                     "CLOSE: " + std::to_string(mContainerCloseCalls.load()));
-            drawRect(commands, rightX + pad, y + 161.0f, w - 2.0f * pad, 1.0f, divider);
-            drawText(commands, rightX + pad, y + 178.0f, 11.0f, white, "Kisteninhalt");
-            drawText(commands, rightX + pad, y + 205.0f, 10.0f, muted, "Slot-Auslesen: NOCH OFFEN");
-            drawText(commands, rightX + pad, y + 228.0f, 9.0f, muted, "Noch keine Kistendaten");
-            drawText(commands, rightX + pad, y + 251.0f, 9.0f, muted, "Keine Preise erfunden.");
-            drawText(commands, rightX + pad, y + h - 45.0f, 9.0f, titleLight,
-                     "Schliessen blendet diese Tafel aus.");
-        }
-        pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
+        std::string panelText = out.str();
+        OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 520.0f);
+        OpsuchtColor panelColor{1.0f, 1.0f, 1.0f, 1.0f};
+        sOriginalDrawText(uiContext, font, &panelRect, &panelText, &panelColor,
+                          1.0f, 0, textMeasure, caretMeasure);
     }
 
     void drawInventoryOverlay(
