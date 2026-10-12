@@ -2575,10 +2575,10 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        // Test 18: Panel nur zeigen, wenn BedrockTools ScreenStateEvent
-        // einen geöffneten Container meldet. Die direkten Kisten-Hooks
-        // protokollieren weiterhin, setzen den Status aber nicht mehr selbst.
-        if (!mEnabled.load() || !mInventoryOpen.load()) return;
+        // Test 20: Dauerpanel wiederhergestellt.
+        // ScreenStateEvent bleibt Diagnoseinformation und darf das Zeichnen
+        // nicht vom Inventarstatus abhängig machen.
+        if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
         double total = 0.0;
