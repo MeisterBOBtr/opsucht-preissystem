@@ -1595,23 +1595,10 @@ private:
         if (mod) {
             mod->mScreenViewRenderCalls.fetch_add(1, std::memory_order_relaxed);
 
-            // Test 22: submit the existing panel again after the original screen
-            // render. This tests whether the mod-menu draw queue is consumed
-            // late enough to appear above the inventory screen. It does not
-            // alter inventory detection or pricing.
-            if (mod->mEnabled.load() &&
-                sLastUiContext &&
-                sLastTextMeasure &&
-                sLastCaretMeasure) {
-                mod->mUiPanelDrawnThisFrame.store(true, std::memory_order_relaxed);
-                mod->drawDirectInventoryOverlayWithArgs(
-                    sLastUiContext,
-                    sLastFont,
-                    sLastTextMeasure,
-                    sLastCaretMeasure
-                );
-                mod->mPostScreenPanelSubmissions.fetch_add(1, std::memory_order_relaxed);
-            }
+            // Test 25 safety change: do not reuse drawText arguments from a
+            // previous UI call here. Their lifetime is not guaranteed after
+            // the original drawText invocation has returned. The overlay is
+            // drawn only from directDrawTextHook using that call's live args.
         }
     }
 
@@ -1644,22 +1631,9 @@ private:
                 self->onTick(actor);
             }
 
-            // Keep the overlay alive from the game tick as well as from the
-            // text-render hook. The inventory screen can replace the normal
-            // HUD text pass; relying only on drawText therefore made the panel
-            // disappear exactly when the inventory was opened.
-            if (self->mEnabled.load() &&
-                sLastUiContext &&
-                sLastTextMeasure &&
-                sLastCaretMeasure &&
-                !self->mUiPanelDrawnThisFrame.exchange(true)) {
-                self->drawDirectInventoryOverlayWithArgs(
-                    sLastUiContext,
-                    sLastFont,
-                    sLastTextMeasure,
-                    sLastCaretMeasure
-                );
-            }
+            // Test 25 safety change: never draw using cached UI pointers from
+            // the game tick. Only draw from directDrawTextHook while its
+            // arguments belong to the current Minecraft text-render call.
         }
         if (sOriginalTick) sOriginalTick(actor);
     }
@@ -2667,7 +2641,7 @@ private:
         out << "-----------------------------------------------\n";
         out << "GESAMTWERT: " << formatMoney(total) << "\n";
         out << "BEWERTETE ITEMS: " << pricedItems << "\n";
-        out << "TEST 24: DIREKTER TEXT-RENDERWEG";
+        out << "TEST 25: LIVE-TEXT-PARAMETER";
 
         std::string panelText = out.str();
         OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 520.0f);
