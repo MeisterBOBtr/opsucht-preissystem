@@ -2640,6 +2640,48 @@ private:
         out << "BEWERTETE ITEMS: " << pricedItems << "\n";
         out << "TEST 26: STABILITAETSTEST";
 
+        // TEST 27: keep the proven direct drawText path for visibility over
+        // inventory, and restore the OPVANTIS dark/purple panel styling through
+        // the existing draw-command API. The native text path remains the
+        // fallback for the actual item data if the background layer is occluded.
+        std::vector<pl::modmenu::DrawCommand> commands;
+        commands.reserve(40);
+        constexpr float x = 18.0f, y = 42.0f, w = 420.0f, h = 420.0f;
+        constexpr std::uint32_t bg = 0xE6101119;
+        constexpr std::uint32_t accent = 0xFFD5A8FF;
+        constexpr std::uint32_t border = 0xFF7435B0;
+        constexpr std::uint32_t muted = 0xFFB8C0CC;
+        constexpr std::uint32_t white = 0xFFF2F2F2;
+        drawRect(commands, x, y, w, h, bg);
+        drawRect(commands, x, y, w, 3.0f, border);
+        drawRect(commands, x, y, 3.0f, h, border);
+        drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
+        drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS - INVENTARWERT");
+        drawText(commands, x + 12.0f, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE | OPSUCHT");
+        drawText(commands, x + 12.0f, y + 52.0f, 10.0f, accent, "ITEM                         MENGE       PREIS/ST.");
+        drawText(commands, x + 12.0f, y + 70.0f, 9.0f, muted, "-----------------------------------------------");
+        if (entries.empty()) {
+            drawText(commands, x + 12.0f, y + 91.0f, 10.0f, white, "Inventar wird gelesen...");
+        } else {
+            const std::size_t shown = std::min<std::size_t>(entries.size(), 14);
+            for (std::size_t i = 0; i < shown; ++i) {
+                const auto& e = entries[i];
+                std::string name = e.name.empty() ? "Unbekannt" : e.name;
+                if (name.size() > 22) name = name.substr(0, 19) + "...";
+                std::ostringstream row;
+                row << std::left << std::setw(22) << name << "  "
+                    << std::right << std::setw(4) << e.amount << "   "
+                    << std::setw(9) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
+                drawText(commands, x + 12.0f, y + 91.0f + 19.0f * static_cast<float>(i), 9.0f, white, row.str());
+            }
+        }
+        drawText(commands, x + 12.0f, y + h - 43.0f, 10.0f, muted, "GESAMTWERT");
+        drawText(commands, x + 132.0f, y + h - 43.0f, 11.0f, accent, formatMoney(total));
+        pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".opvantis-panel", commands);
+
+        // Direct native text remains enabled to test overlay visibility above
+        // the inventory. This is intentionally separate from the styled layer.
         std::string panelText = out.str();
         OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 520.0f);
         OpsuchtColor panelColor{1.0f, 1.0f, 1.0f, 1.0f};
