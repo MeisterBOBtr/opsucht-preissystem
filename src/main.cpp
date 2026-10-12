@@ -1594,6 +1594,24 @@ private:
         }
         if (mod) {
             mod->mScreenViewRenderCalls.fetch_add(1, std::memory_order_relaxed);
+
+            // Test 22: submit the existing panel again after the original screen
+            // render. This tests whether the mod-menu draw queue is consumed
+            // late enough to appear above the inventory screen. It does not
+            // alter inventory detection or pricing.
+            if (mod->mEnabled.load() &&
+                sLastUiContext &&
+                sLastTextMeasure &&
+                sLastCaretMeasure) {
+                mod->mUiPanelDrawnThisFrame.store(true, std::memory_order_relaxed);
+                mod->drawDirectInventoryOverlayWithArgs(
+                    sLastUiContext,
+                    sLastFont,
+                    sLastTextMeasure,
+                    sLastCaretMeasure
+                );
+                mod->mPostScreenPanelSubmissions.fetch_add(1, std::memory_order_relaxed);
+            }
         }
     }
 
@@ -2680,6 +2698,7 @@ private:
                  "TEXT: " + std::to_string(mDrawTextCalls.load()) +
                  " UI: " + std::to_string(mInventoryLabelHits.load()) +
                  " RENDER: " + std::to_string(mScreenViewRenderCalls.load()) +
+                 " POST: " + std::to_string(mPostScreenPanelSubmissions.load()) +
                  (mScreenViewRenderHookInstalled.load() ? " OK" : " NOHOOK"));
         drawText(commands, x + pad, y + 97.0f, 8.0f, titleLight, "PROTOKOLL:");
         std::vector<std::string> topLogCopy;
@@ -2793,6 +2812,7 @@ private:
     std::atomic_bool mUiPanelDrawnThisFrame{false};
     std::atomic_bool mScreenViewRenderHookInstalled{false};
     std::atomic<std::uint64_t> mScreenViewRenderCalls{0};
+    std::atomic<std::uint64_t> mPostScreenPanelSubmissions{0};
     std::atomic_bool mInventoryTextSeenThisFrame{false};
     std::atomic<int> mInventoryTextMissingFrames{0};
 
