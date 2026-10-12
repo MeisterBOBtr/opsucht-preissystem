@@ -1669,7 +1669,8 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerOpenCalls.fetch_add(1);
-            self->addDiagLog("Container OPEN hook (Hook allein setzt Status nicht)");
+            self->mContainerVisible.store(true);
+            self->addDiagLog("Container OPEN hook (rechte Testtafel aktiviert)");
             self->mUiPanelDrawnThisFrame.store(false);
         }
         return sOriginalContainerOpen ? sOriginalContainerOpen(a0, a1, a2, a3, a4, a5, a6, a7) : nullptr;
@@ -1679,7 +1680,8 @@ private:
         auto* self = sInstance;
         if (self) {
             self->mContainerCloseCalls.fetch_add(1);
-            self->addDiagLog("Container CLOSE hook (Hook allein setzt Status nicht)");
+            self->mContainerVisible.store(false);
+            self->addDiagLog("Container CLOSE hook (rechte Testtafel deaktiviert)");
             self->mUiPanelDrawnThisFrame.store(false);
         }
         return sOriginalContainerDtor ? sOriginalContainerDtor(a0, a1, a2, a3, a4, a5, a6, a7) : nullptr;
@@ -2627,9 +2629,6 @@ private:
     }
 
     void drawDirectInventoryOverlayWithArgs(void*, void*, void*, void*) {
-        // Test 20: Dauerpanel wiederhergestellt.
-        // ScreenStateEvent bleibt Diagnoseinformation und darf das Zeichnen
-        // nicht vom Inventarstatus abhängig machen.
         if (!mEnabled.load()) return;
 
         std::vector<InventoryEntry> entries;
@@ -2643,129 +2642,93 @@ private:
         }
 
         std::vector<pl::modmenu::DrawCommand> commands;
-        commands.reserve(64);
-
-        constexpr float x = 18.0f;
+        commands.reserve(180);
         constexpr float y = 38.0f;
-        // Keep the current panel width; extend it vertically for 18 item rows.
-        constexpr float w = 390.0f;
+        constexpr float w = 350.0f;
         constexpr float h = 860.0f;
-        constexpr float pad = 14.0f;
-        constexpr std::uint32_t bg = 0xE8171921;       // Preserve current dark background.
+        constexpr float pad = 12.0f;
+        constexpr std::uint32_t bg = 0xE8171921;
         constexpr std::uint32_t white = 0xFFF0F0F0;
         constexpr std::uint32_t muted = 0xFFB6BBC5;
-        constexpr std::uint32_t violet = 0xFF54247D;   // Dark violet frame.
-        constexpr std::uint32_t divider = 0xFF39234D;  // Subtle violet dividers.
-
-        // Single panel surface, with a dark-violet frame and no item boxes.
-        drawRect(commands, x, y, w, h, bg);
-        drawRect(commands, x, y, w, 3.0f, violet);
-        drawRect(commands, x, y + h - 3.0f, w, 3.0f, violet);
-        drawRect(commands, x, y, 3.0f, h, violet);
-        drawRect(commands, x + w - 3.0f, y, 3.0f, h, violet);
-        drawRect(commands, x + 1.0f, y + 118.0f, w - 2.0f, 1.0f, divider);
-
-        // Purple gradient title, drawn with ordinary text commands (no image texture).
-        const std::string title = "OPVANTIS";
+        constexpr std::uint32_t violet = 0xFF7435B0;
         constexpr std::uint32_t titleLight = 0xFFE7C8FF;
-        constexpr std::uint32_t titleDark  = 0xFF7435B0;
-        auto channel = [](std::uint32_t c, int shift) {
-            return static_cast<int>((c >> shift) & 0xFFu);
-        };
-        for (std::size_t i = 0; i < title.size(); ++i) {
-            const float t = title.size() <= 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(title.size() - 1);
-            auto mix = [t](int a, int b) { return static_cast<std::uint32_t>(a + (b - a) * t + 0.5f); };
-            const std::uint32_t color = 0xFF000000u
-                | (mix(channel(titleLight, 16), channel(titleDark, 16)) << 16)
-                | (mix(channel(titleLight, 8), channel(titleDark, 8)) << 8)
-                | mix(channel(titleLight, 0), channel(titleDark, 0));
-            drawText(commands, x + pad + static_cast<float>(i) * 13.0f, y + 10.0f, 19.0f, color, title.substr(i, 1));
-        }
-        drawText(commands, x + pad, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE  |  OPSUCHT");
+        constexpr std::uint32_t divider = 0xFF39234D;
+        const float leftX = 12.0f;
+        const float rightX = 374.0f;
 
-        // Compact diagnostic block moved to the top so it is visible on mobile.
-        drawText(commands, x + pad, y + 49.0f, 8.0f, titleLight,
+        auto panelFrame = [&](float x, const std::string& heading) {
+            drawRect(commands, x, y, w, h, bg);
+            drawRect(commands, x, y, w, 3.0f, violet);
+            drawRect(commands, x, y + h - 3.0f, w, 3.0f, violet);
+            drawRect(commands, x, y, 3.0f, h, violet);
+            drawRect(commands, x + w - 3.0f, y, 3.0f, h, violet);
+            drawRect(commands, x + 1.0f, y + 86.0f, w - 2.0f, 1.0f, divider);
+            drawText(commands, x + pad, y + 10.0f, 18.0f, titleLight, "OPVANTIS");
+            drawText(commands, x + pad, y + 33.0f, 9.0f, muted, "AUKTIONSANZEIGE | OPSUCHT");
+            drawText(commands, x + pad, y + 59.0f, 12.0f, violet, heading);
+        };
+
+        // LEFT: player's inventory and the existing price data path.
+        panelFrame(leftX, "SPIELERINVENTAR");
+        drawText(commands, leftX + pad, y + 96.0f, 8.0f, muted,
                  std::string("STATUS: ") + (mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN") +
                  "  TICKS: " + std::to_string(mDiagTicks.load()));
-        drawText(commands, x + pad, y + 61.0f, 8.0f, muted,
-                 "SCREEN: " + std::to_string(mScreenEvents.load()) +
-                 " TYPE: " + std::to_string(mLastScreenKind.load()) +
-                 " PHASE: " + std::to_string(mLastScreenPhase.load()));
-        drawText(commands, x + pad, y + 73.0f, 8.0f, muted,
-                 "HOOK OPEN/CLOSE: " + std::to_string(mContainerOpenCalls.load()) +
-                 "/" + std::to_string(mContainerCloseCalls.load()));
-        drawText(commands, x + pad, y + 85.0f, 8.0f, muted,
-                 "TEXT: " + std::to_string(mDrawTextCalls.load()) +
-                 " UI: " + std::to_string(mInventoryLabelHits.load()) +
-                 " RENDER: " + std::to_string(mScreenViewRenderCalls.load()) +
-                 " POST: " + std::to_string(mPostScreenPanelSubmissions.load()) +
-                 (mScreenViewRenderHookInstalled.load() ? " OK" : " NOHOOK"));
-        drawText(commands, x + pad, y + 97.0f, 8.0f, titleLight, "PROTOKOLL:");
-        std::vector<std::string> topLogCopy;
-        {
-            std::lock_guard<std::mutex> lock(mDiagLogMutex);
-            topLogCopy = mDiagLog;
-        }
-        if (topLogCopy.empty()) {
-            drawText(commands, x + pad + 70.0f, y + 97.0f, 8.0f, muted, "Noch keine Ereignisse");
-        } else {
-            const auto& latest = topLogCopy.back();
-            const std::string clipped = latest.size() > 42 ? latest.substr(0, 39) + "..." : latest;
-            drawText(commands, x + pad + 70.0f, y + 97.0f, 8.0f, white, clipped);
-            if (topLogCopy.size() > 1) {
-                const auto& previous = topLogCopy[topLogCopy.size() - 2];
-                const std::string clippedPrevious = previous.size() > 42 ? previous.substr(0, 39) + "..." : previous;
-                drawText(commands, x + pad, y + 109.0f, 7.0f, muted, clippedPrevious);
-            }
-        }
-
-        drawText(commands, x + pad, y + 120.0f, 10.0f, violet, "ITEM");
-        drawText(commands, x + 220.0f, y + 120.0f, 10.0f, violet, "MENGE");
-        drawText(commands, x + 285.0f, y + 120.0f, 10.0f, violet, "PREIS/ST.");
-
-        const float firstRow = y + 146.0f;
+        drawText(commands, leftX + pad, y + 108.0f, 8.0f, muted,
+                 "KISTEN-HOOK: " + std::to_string(mContainerOpenCalls.load()) + "/" +
+                 std::to_string(mContainerCloseCalls.load()));
+        drawText(commands, leftX + pad, y + 130.0f, 10.0f, violet, "ITEM");
+        drawText(commands, leftX + 214.0f, y + 130.0f, 10.0f, violet, "MENGE");
+        drawText(commands, leftX + 274.0f, y + 130.0f, 10.0f, violet, "PREIS/ST.");
+        const float firstRow = y + 154.0f;
         constexpr float rowH = 20.0f;
-        constexpr std::size_t maxRows = 18;
+        constexpr std::size_t maxRows = 24;
         if (entries.empty()) {
-            drawText(commands, x + pad, firstRow, 12.0f, white, "Inventar wird gelesen...");
+            drawText(commands, leftX + pad, firstRow, 11.0f, white, "Inventar wird gelesen...");
         } else {
             const std::size_t shown = std::min<std::size_t>(entries.size(), maxRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& entry = entries[i];
                 std::string name = entry.name.empty() ? "Unbekannt" : entry.name;
-                if (name.size() > 23) name = name.substr(0, 20) + "...";
+                if (name.size() > 21) name = name.substr(0, 18) + "...";
                 const float rowY = firstRow + static_cast<float>(i) * rowH;
-                drawText(commands, x + pad, rowY, 11.0f, white, name);
-
-                std::ostringstream amount;
-                amount << entry.amount;
-                drawText(commands, x + 224.0f, rowY, 11.0f, white, amount.str());
-
-                const std::string price = entry.unitPrice > 0.0 ? formatMoney(entry.unitPrice) : "-";
-                drawText(commands, x + 285.0f, rowY, 11.0f,
-                         entry.unitPrice > 0.0 ? titleLight : muted, price);
+                drawText(commands, leftX + pad, rowY, 10.0f, white, name);
+                drawText(commands, leftX + 218.0f, rowY, 10.0f, white, std::to_string(entry.amount));
+                drawText(commands, leftX + 274.0f, rowY, 10.0f,
+                         entry.unitPrice > 0.0 ? titleLight : muted,
+                         entry.unitPrice > 0.0 ? formatMoney(entry.unitPrice) : "-");
             }
-            if (entries.size() > maxRows) {
-                std::ostringstream more;
-                more << "+ " << (entries.size() - maxRows) << " weitere Items";
-                drawText(commands, x + pad, firstRow + maxRows * rowH, 9.0f, muted, more.str());
-            }
+            if (entries.size() > maxRows)
+                drawText(commands, leftX + pad, firstRow + maxRows * rowH, 8.0f, muted,
+                         "+ " + std::to_string(entries.size() - maxRows) + " weitere Items");
         }
+        const float footerY = y + h - 54.0f;
+        drawRect(commands, leftX + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
+        drawText(commands, leftX + pad, footerY, 9.0f, muted, "GESAMTWERT DES INVENTARS");
+        drawText(commands, leftX + pad, footerY + 17.0f, 16.0f, titleLight, formatMoney(total));
+        drawText(commands, leftX + 205.0f, footerY + 20.0f, 8.0f, muted,
+                 std::to_string(pricedItems) + " bewertet");
 
-        // Test 16: detailed diagnostic counters and the event log are placed
-        // at the top of the panel (above the item list), not below the fold.
-
-        const float footerY = y + h - 56.0f;
-        drawRect(commands, x + 1.0f, footerY - 8.0f, w - 2.0f, 1.0f, divider);
-        drawText(commands, x + pad, footerY, 9.0f, muted, "GESAMTWERT DES INVENTARS");
-        drawText(commands, x + pad, footerY + 17.0f, 17.0f, titleLight, formatMoney(total));
-
-        std::ostringstream status;
-        status << pricedItems << " bewertete Eintraege";
-        drawText(commands, x + 220.0f, footerY + 20.0f, 9.0f, muted, status.str());
-
+        // RIGHT: only a screen/hook test. BedrockTools' generic Container hook
+        // does not expose chest slots, so this deliberately does NOT pretend to
+        // display chest items or prices until a verified slot-access path exists.
+        if (mContainerVisible.load()) {
+            panelFrame(rightX, "GEÖFFNETE KISTE");
+            drawText(commands, rightX + pad, y + 99.0f, 10.0f, titleLight, "KISTEN-HOOK: ERKANNT");
+            drawText(commands, rightX + pad, y + 120.0f, 9.0f, muted,
+                     "OPEN: " + std::to_string(mContainerOpenCalls.load()));
+            drawText(commands, rightX + pad, y + 137.0f, 9.0f, muted,
+                     "CLOSE: " + std::to_string(mContainerCloseCalls.load()));
+            drawRect(commands, rightX + pad, y + 161.0f, w - 2.0f * pad, 1.0f, divider);
+            drawText(commands, rightX + pad, y + 178.0f, 11.0f, white, "Kisteninhalt");
+            drawText(commands, rightX + pad, y + 205.0f, 10.0f, muted, "Slot-Auslesen: NOCH OFFEN");
+            drawText(commands, rightX + pad, y + 228.0f, 9.0f, muted, "Noch keine Kistendaten");
+            drawText(commands, rightX + pad, y + 251.0f, 9.0f, muted, "Keine Preise erfunden.");
+            drawText(commands, rightX + pad, y + h - 45.0f, 9.0f, titleLight,
+                     "Schliessen blendet diese Tafel aus.");
+        }
         pl::modmenu::submitDrawCommands(std::string(kModuleId), commands);
     }
+
     void drawInventoryOverlay(
         const std::vector<InventoryEntry>&,
         double,
@@ -2847,6 +2810,7 @@ private:
     std::atomic<std::uint64_t> mNonContainerScreenEvents{0};
     std::atomic<std::uint64_t> mContainerOpenCalls{0};
     std::atomic<std::uint64_t> mContainerCloseCalls{0};
+    std::atomic_bool mContainerVisible{false};
     std::atomic<std::uint64_t> mDrawTextCalls{0};
     std::atomic<std::uint64_t> mInventoryLabelHits{0};
     std::atomic<int> mLastScreenKind{-1};
