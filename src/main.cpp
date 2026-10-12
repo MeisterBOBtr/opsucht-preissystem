@@ -1711,14 +1711,11 @@ private:
             }
         }
 
-        // Draw exactly once per Minecraft tick. The previous version drew on
-        // every drawText call, which caused the panel to duplicate and flicker.
-        // Drawing after the inventory screen's own text is seen gives the panel
-        // a late, stable place in the same safe drawText pass.
-        // Test 16: Keep panel drawing independent of inventory state. This
-        // ensures the on-panel event log remains visible after closing UI.
-        if (self && self->mEnabled.load() &&
-            !self->mUiPanelDrawnThisFrame.exchange(true)) {
+        // Test 26: draw after each original UI text call so later inventory
+        // labels do not immediately cover the overlay. The overlay calls the
+        // saved original function directly, so it does not recurse through this
+        // hook. Do not cache or retain any of these call-local pointers.
+        if (self && self->mEnabled.load()) {
             self->drawDirectInventoryOverlayWithArgs(ctx, font, textData, caretData);
         }
     }
@@ -2641,7 +2638,7 @@ private:
         out << "-----------------------------------------------\n";
         out << "GESAMTWERT: " << formatMoney(total) << "\n";
         out << "BEWERTETE ITEMS: " << pricedItems << "\n";
-        out << "TEST 25: LIVE-TEXT-PARAMETER";
+        out << "TEST 26: STABILITAETSTEST";
 
         std::string panelText = out.str();
         OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 520.0f);
