@@ -1560,7 +1560,7 @@ private:
     using ItemStringFn = std::string(*)(const void*);
     using ItemDescriptionIdFn = const std::string&(*)(const void*);
     using TickFn = void(*)(void*);
-    using ScreenViewRenderFn = void(*)(void*, void*);
+    using ScreenViewRenderFn = void(*)(void*, void*, void*, void*, void*, void*, void*, void*);
     using ScreenFn = void*(*)(void*, void*, void*, void*, void*, void*, void*, void*);
     using DrawTextFn = void(*)(void*, void*, void*, std::string*, void*, float, int, void*, void*);
 
@@ -1582,6 +1582,20 @@ private:
     static void* sLastFont;
     static void* sLastTextMeasure;
     static void* sLastCaretMeasure;
+
+    static void directScreenViewRenderHook(
+        void* self, void* a2, void* a3, void* a4,
+        void* a5, void* a6, void* a7, void* a8
+    ) {
+        auto* mod = sInstance;
+        // Keep the game's original screen rendering untouched.
+        if (sOriginalScreenViewRender) {
+            sOriginalScreenViewRender(self, a2, a3, a4, a5, a6, a7, a8);
+        }
+        if (mod) {
+            mod->mScreenViewRenderCalls.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
 
     static void directTickHook(void* actor) {
         auto* self = sInstance;
@@ -1855,6 +1869,26 @@ private:
                     reinterpret_cast<void*>(containerDtor),
                     reinterpret_cast<void*>(&directContainerDtorHook),
                     reinterpret_cast<void**>(&sOriginalContainerDtor)
+                );
+            }
+
+            // Test 21: Observe the native ScreenView::render pass. This is
+            // deliberately diagnostic-only: call the original exactly once and
+            // count invocations without changing the game's rendering order.
+            const auto screenViewRender = pl::memory::resolveSignature(
+                "? ? ? FC ? ? ? 6D ? ? ? 6D ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 ? ? ? D1 48 D0 3B D5 FC 03 00 AA",
+                "libminecraftpe.so"
+            );
+            if (screenViewRender && !mScreenViewRenderHook.installed()) {
+                mScreenViewRenderHook = pl::memory::HookHandle(
+                    reinterpret_cast<void*>(screenViewRender),
+                    reinterpret_cast<void*>(&directScreenViewRenderHook),
+                    reinterpret_cast<void**>(&sOriginalScreenViewRender)
+                );
+                mScreenViewRenderHookInstalled.store(mScreenViewRenderHook.installed());
+                mSelf.getLogger().info(
+                    "OPVANTIS ScreenViewRender hook installed: {}",
+                    mScreenViewRenderHookInstalled.load()
                 );
             }
 
@@ -2554,7 +2588,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
-        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS DIAGNOSE T17");
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS RENDER TEST 21");
         auto line = [&](int row, const std::string& label, const std::string& value) {
             drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
             drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
@@ -2643,8 +2677,10 @@ private:
                  "HOOK OPEN/CLOSE: " + std::to_string(mContainerOpenCalls.load()) +
                  "/" + std::to_string(mContainerCloseCalls.load()));
         drawText(commands, x + pad, y + 85.0f, 8.0f, muted,
-                 "TEXT-HOOKS: " + std::to_string(mDrawTextCalls.load()) +
-                 "  UI-TREFFER: " + std::to_string(mInventoryLabelHits.load()));
+                 "TEXT: " + std::to_string(mDrawTextCalls.load()) +
+                 " UI: " + std::to_string(mInventoryLabelHits.load()) +
+                 " RENDER: " + std::to_string(mScreenViewRenderCalls.load()) +
+                 (mScreenViewRenderHookInstalled.load() ? " OK" : " NOHOOK"));
         drawText(commands, x + pad, y + 97.0f, 8.0f, titleLight, "PROTOKOLL:");
         std::vector<std::string> topLogCopy;
         {
@@ -2755,6 +2791,8 @@ private:
     std::atomic_bool mUiRenderHookInstalled{false};
     std::atomic_bool mUiTextHookInstalled{false};
     std::atomic_bool mUiPanelDrawnThisFrame{false};
+    std::atomic_bool mScreenViewRenderHookInstalled{false};
+    std::atomic<std::uint64_t> mScreenViewRenderCalls{0};
     std::atomic_bool mInventoryTextSeenThisFrame{false};
     std::atomic<int> mInventoryTextMissingFrames{0};
 
