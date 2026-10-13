@@ -2680,13 +2680,46 @@ private:
         drawText(commands, x + 132.0f, y + h - 43.0f, 11.0f, accent, formatMoney(total));
         pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".opvantis-panel", commands);
 
-        // Direct native text remains enabled to test overlay visibility above
-        // the inventory. This is intentionally separate from the styled layer.
-        std::string panelText = out.str();
-        OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 520.0f);
-        OpsuchtColor panelColor{1.0f, 1.0f, 1.0f, 1.0f};
-        sOriginalDrawText(uiContext, font, &panelRect, &panelText, &panelColor,
-                          1.0f, 0, textMeasure, caretMeasure);
+        // DESIGN-ONLY TEST: keep Test 27's proven native drawText path, but
+        // draw each line separately so the title, headings and total can use
+        // OPVANTIS purple accents. No inventory, price, API, or timing logic
+        // is changed. The ModMenu background/border commands above are kept.
+        const OpsuchtColor titleColor{0.84f, 0.66f, 1.00f, 1.00f};
+        const OpsuchtColor accentColor{0.68f, 0.42f, 0.92f, 1.00f};
+        const OpsuchtColor mutedColor{0.72f, 0.75f, 0.82f, 1.00f};
+        const OpsuchtColor whiteColor{0.96f, 0.96f, 0.98f, 1.00f};
+        auto nativeLine = [&](float y, const std::string& text, const OpsuchtColor& color,
+                              float left = 18.0f, float right = 640.0f) {
+            OpsuchtRectangleArea lineRect = makePanelRect(left, y, right, y + 20.0f);
+            std::string lineText = text;
+            sOriginalDrawText(uiContext, font, &lineRect, &lineText,
+                              const_cast<OpsuchtColor*>(&color), 1.0f, 0,
+                              textMeasure, caretMeasure);
+        };
+
+        nativeLine(42.0f,  "OPVANTIS  |  INVENTARWERT", titleColor);
+        nativeLine(63.0f,  "AUKTIONSANZEIGE  /  OPSUCHT", mutedColor);
+        nativeLine(84.0f,  "ITEM                         MENGE       PREIS/ST.", accentColor);
+        nativeLine(101.0f, "-----------------------------------------------", mutedColor);
+        if (entries.empty()) {
+            nativeLine(122.0f, "Inventar wird gelesen...", whiteColor);
+        } else {
+            const std::size_t shown = std::min<std::size_t>(entries.size(), 14);
+            for (std::size_t i = 0; i < shown; ++i) {
+                const auto& e = entries[i];
+                std::string name = e.name.empty() ? "Unbekannt" : e.name;
+                if (name.size() > 22) name = name.substr(0, 19) + "...";
+                std::ostringstream row;
+                row << std::left << std::setw(22) << name << "  "
+                    << std::right << std::setw(4) << e.amount << "   "
+                    << std::setw(9) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
+                nativeLine(122.0f + 18.0f * static_cast<float>(i), row.str(), whiteColor);
+            }
+        }
+        nativeLine(390.0f, "-----------------------------------------------", mutedColor);
+        nativeLine(411.0f, "GESAMTWERT: " + formatMoney(total), titleColor);
+        nativeLine(432.0f, "BEWERTETE ITEMS: " + std::to_string(pricedItems), mutedColor);
+        nativeLine(453.0f, "OPVANTIS  /  STABILITAETSTEST", accentColor);
     }
 
     void drawInventoryOverlay(
