@@ -114,16 +114,22 @@ jobs:
         id: find_pack
         if: success()
         run: |
-          echo "Suche nach erzeugten .levipack-Dateien..."
+          echo "Suche nach LeviPack-Dateien..."
 
-          find template -type f -name "*.levipack" -print
-
-          PACK="$(find template -type f -name "*.levipack" -print -quit)"
+          PACK="$(find "$GITHUB_WORKSPACE" \
+            -type f -name "*.levipack" \
+            -not -path "*/.git/*" -print -quit)"
 
           if [ -z "$PACK" ]; then
             echo "Keine .levipack-Datei gefunden."
-            echo "Dateien im Template:"
-            find template -maxdepth 5 -type f | sort
+            echo "=== Build-Ausgabe ==="
+            find template -maxdepth 5 -type f \
+              \( -name "*.zip" -o -name "*.apk" \
+                 -o -name "*.levipack" -o -name "*.json" \) \
+              -print | sort
+            echo "=== Paket-Ordner ==="
+            find template -maxdepth 3 -type d \
+              \( -name "build*" -o -name "dist" \) -print
             exit 1
           fi
 
