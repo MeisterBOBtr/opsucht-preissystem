@@ -823,7 +823,7 @@ public:
                 if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
             }
 
-            // Test45: conservative suffix lookup for Geyser IDs whose technical
+            // Test46: conservative suffix lookup for Geyser IDs whose technical
             // tail contains the catalog identity plus an OPSUCHT prefix, e.g.
             // `..._golden_excalibur` -> catalog `Excalibur`. Match only complete
             // underscore-delimited suffixes of catalog names (never material IDs),
@@ -862,6 +862,32 @@ public:
             for (const auto& [catalogKey, info] : mPrices) considerSuffix(catalogKey, info);
             for (const auto& [catalogKey, info] : mAliases) considerSuffix(catalogKey, info);
             if (suffixMatch && !suffixAmbiguous) return *suffixMatch;
+
+            // Test46: OPSUCHT/Geyser technical IDs often use English words while
+            // the catalog stores German market names (e.g. beach_shovel ->
+            // Strandschaufel, berserk_axe -> Berserkeraxt). Generate only explicit
+            // whole-phrase aliases, then require an exact catalog-key match. Never
+            // match by minecraft_id and never use a generic vanilla fallback.
+            static const std::vector<std::pair<std::string, std::string>> translatedPhrases = {
+                {"beach_shovel", "strandschaufel"},
+                {"berserk_axe", "berserkeraxt"},
+                {"bone_pickaxe", "knochenspitzhacke"},
+                {"golden_excalibur", "excalibur"},
+                {"rust_shovel", "rostschaufel"},
+                {"pearl_pickaxe", "perlenspitzhacke"},
+                {"pumpkin_melon_axe", "kuerbis_melonen_axt"},
+            };
+            for (const auto& [technicalPhrase, catalogPhrase] : translatedPhrases) {
+                if (tech.size() < technicalPhrase.size()) continue;
+                const bool phraseAtEnd = tech == technicalPhrase ||
+                    (tech.size() > technicalPhrase.size() &&
+                     tech.compare(tech.size() - technicalPhrase.size(), technicalPhrase.size(), technicalPhrase) == 0 &&
+                     tech[tech.size() - technicalPhrase.size() - 1] == '_');
+                if (!phraseAtEnd) continue;
+                const std::string translatedKey = normalizeItem(catalogPhrase);
+                if (auto it = mPrices.find(translatedKey); it != mPrices.end()) return it->second;
+                if (auto it = mAliases.find(translatedKey); it != mAliases.end()) return it->second;
+            }
 
             return {};
         }
@@ -2350,7 +2376,7 @@ private:
                     // the Bedrock ItemStack on the existing item row. This is
                     // temporary diagnostic text, not a price/identity fallback.
                     // Keep the frozen panel geometry unchanged.
-                    // Test45: report whether each Bedrock candidate resolves through the safe catalog lookup
+                    // Test46: report whether each Bedrock candidate resolves through the safe catalog lookup
                     // an EXACT catalog match in the currently loaded Supabase data.
                     // This distinguishes a naming/normalization issue from an item
                     // that simply has no priced catalog row. No fuzzy/base fallback.
@@ -2386,7 +2412,7 @@ private:
                     }
                     std::string diagLabel = diag.str();
                     if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T45 DBG: " + diagLabel;
+                    entry.name = "T46 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2396,7 +2422,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T45 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "T46 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2722,7 +2748,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST45");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST46");
         // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
@@ -2732,8 +2758,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T45 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T45 DBG:", 0) != 0) name = "T45 DBG: " + name;
+                std::string name = e.name.empty() ? "T46 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T46 DBG:", 0) != 0) name = "T46 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2773,7 +2799,7 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST45", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST46", nativeAccent);
         nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (EXAKTER SUPABASE-TREFFER)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
@@ -2782,8 +2808,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T45 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T45 DBG:", 0) != 0) name = "T45 DBG: " + name;
+                std::string name = e.name.empty() ? "T46 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T46 DBG:", 0) != 0) name = "T46 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
