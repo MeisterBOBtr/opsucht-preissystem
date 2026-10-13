@@ -883,7 +883,8 @@ public:
         return {};
     }
 
-    // Strict catalog lookup for a readable custom display name. Unlike
+    // Strict catalog lookup for a readable custom display name, prioritizing the
+    // exact OPSUCHT catalog alias (opsucht_name). Unlike
     // findMatch(), this never uses fuzzy matching or a vanilla-material fallback.
     // This is essential when several OPSUCHT custom items share one Bedrock type
     // (for example two talismans represented by the same totem item).
@@ -1211,7 +1212,7 @@ private:
                     PriceInfo info;
                     info.sum = avgPrice * static_cast<double>(samples);
                     info.samples = samples;
-                    info.displayName = !name.empty() ? name : opsuchtName;
+                    info.displayName = !opsuchtName.empty() ? opsuchtName : name;
                     info.displayKey = true;
 
                     auto addKey = [&](std::unordered_map<std::string, PriceInfo>& target,
@@ -1228,7 +1229,11 @@ private:
                     addKey(nextPrices, name);
                     addKey(nextAliases, name);
                     addKey(nextAliases, opsuchtName);
-                    addKey(nextAliases, minecraftId);
+                    // Keep minecraft_id out of the exact alias map. It is only a
+                    // base Bedrock type and can be shared by many OPSUCHT custom
+                    // items (e.g. Wolfstalisman and Unsichtbarkeitstalisman).
+                    // Base-material matching is handled separately and only when
+                    // the catalog proves that the material is unambiguous.
 
                     // Only expose a material fallback when that material maps to
                     // one unambiguous article. This prevents custom items from
@@ -1236,7 +1241,7 @@ private:
                     if (!minecraftId.empty()) {
                         const std::string materialKey = normalizeItem(minecraftId);
                         auto owner = materialOwners.find(materialKey);
-                        const std::string articleKey = normalizeItem(!name.empty() ? name : opsuchtName);
+                        const std::string articleKey = normalizeItem(!opsuchtName.empty() ? opsuchtName : name);
                         if (owner == materialOwners.end()) {
                             materialOwners[materialKey] = articleKey;
                             nextMaterials[materialKey] = info;
