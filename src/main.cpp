@@ -2317,19 +2317,16 @@ private:
                     // temporary diagnostic text, not a price/identity fallback.
                     // Keep the frozen panel geometry unchanged.
                     std::string diagLabel;
-                    if (!stackDisplayName.empty()) diagLabel = stackDisplayName;
-                    if (!candidates.empty()) {
-                        const std::string& firstCandidate = candidates.front();
-                        if (!firstCandidate.empty() && firstCandidate != diagLabel) {
-                            if (!diagLabel.empty()) diagLabel += " | ";
-                            diagLabel += firstCandidate;
-                        }
-                    }
-                    if (diagLabel.empty()) diagLabel = rawName;
+                    // Test41 exposes the actual candidate list gathered from the
+                    // Bedrock stack. The renderer keeps the existing row width and
+                    // panel geometry; the visible prefix helps identify the source.
+                    if (!debugDetails.empty()) diagLabel = debugDetails;
+                    else if (!stackDisplayName.empty()) diagLabel = stackDisplayName;
+                    else if (!candidates.empty()) diagLabel = candidates.front();
+                    else diagLabel = rawName;
                     if (diagLabel.empty()) diagLabel = "NO_NAME";
-                    // Keep row text short enough for the existing Test31 column.
                     if (diagLabel.size() > 28) diagLabel.resize(28);
-                    entry.name = "T40 DBG: " + diagLabel;
+                    entry.name = "T41 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2665,7 +2662,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST39");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST41");
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM");
         drawText(commands, x + 246.0f, y + 36.0f, 9.0f, accent, "STUECK");
         drawText(commands, x + 322.0f, y + 36.0f, 9.0f, accent, "PREIS/ST.");
@@ -2676,8 +2673,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T40 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T40 DBG:", 0) != 0) name = "T40 DBG: " + name;
+                std::string name = e.name.empty() ? "T41 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T41 DBG:", 0) != 0) name = "T41 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2732,8 +2729,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T40 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T40 DBG:", 0) != 0) name = "T40 DBG: " + name;
+                std::string name = e.name.empty() ? "T41 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T41 DBG:", 0) != 0) name = "T41 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 170.0f, name, nativeWhite);
