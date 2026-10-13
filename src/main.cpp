@@ -2150,7 +2150,7 @@ private:
                     }
                 }
 
-                // V3 DIAGNOSTIC: preserve the raw client-side identity evidence instead
+                // TEST38 DIAGNOSTIC: preserve the raw client-side identity evidence instead
                 // of guessing a market price. This lets us see which ItemStack fields
                 // are actually different for OPSUCHT custom/enchant variants.
                 if (debugItemPtr) {
@@ -2312,7 +2312,24 @@ private:
                 // exact requested label instead of implying that the item is known.
                 // Keep the frozen Test31 layout untouched; this changes text only.
                 if (resolved.samples <= 0 || price <= 0.0) {
-                    entry.name = "Item nicht erfasst";
+                    // TEST38 DIAGNOSTIC BUILD: show the actual strings exposed by
+                    // the Bedrock ItemStack on the existing item row. This is
+                    // temporary diagnostic text, not a price/identity fallback.
+                    // Keep the frozen panel geometry unchanged.
+                    std::string diagLabel;
+                    if (!stackDisplayName.empty()) diagLabel = stackDisplayName;
+                    if (!candidates.empty()) {
+                        const std::string& firstCandidate = candidates.front();
+                        if (!firstCandidate.empty() && firstCandidate != diagLabel) {
+                            if (!diagLabel.empty()) diagLabel += " | ";
+                            diagLabel += firstCandidate;
+                        }
+                    }
+                    if (diagLabel.empty()) diagLabel = rawName;
+                    if (diagLabel.empty()) diagLabel = "NO_NAME";
+                    // Keep row text short enough for the existing Test31 column.
+                    if (diagLabel.size() > 28) diagLabel.resize(28);
+                    entry.name = "DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
