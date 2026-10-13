@@ -2154,22 +2154,16 @@ private:
                 // of guessing a market price. This lets us see which ItemStack fields
                 // are actually different for OPSUCHT custom/enchant variants.
                 if (debugItemPtr) {
+                    // TEST43: show the names exposed by the stack, without pointer
+                    // addresses or raw memory bytes. Those values are not useful for
+                    // matching an item to the Supabase catalog and consume the row.
                     std::ostringstream dbg;
-                    dbg << "slot=" << slot
-                        << " item=0x" << std::hex << debugItemPtr
-                        << " vt=0x" << debugVtablePtr << std::dec;
+                    dbg << "slot=" << slot;
+                    if (!stackDisplayName.empty()) dbg << " | display=" << stackDisplayName;
                     for (std::size_t ci = 0; ci < candidates.size() && ci < 6; ++ci) {
                         dbg << " | c" << ci << "=" << candidates[ci];
                     }
-                    dbg << " | bytes=";
-                    // ItemStack size used by the current inventory bridge is 0x98.
-                    // Capture the first 32 bytes as a stable diagnostic fingerprint.
-                    for (std::size_t bi = 0; bi < 32; ++bi) {
-                        const unsigned int b = static_cast<unsigned int>(
-                            *reinterpret_cast<const std::uint8_t*>(stack + bi));
-                        if (bi) dbg << ':';
-                        dbg << std::hex << std::setw(2) << std::setfill('0') << b;
-                    }
+                    if (candidates.empty() && !rawName.empty()) dbg << " | raw=" << rawName;
                     debugDetails = dbg.str();
                 }
 
@@ -2326,7 +2320,7 @@ private:
                     else diagLabel = rawName;
                     if (diagLabel.empty()) diagLabel = "NO_NAME";
                     if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T42 DBG: " + diagLabel;
+                    entry.name = "T43 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2662,7 +2656,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST42");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST43");
         // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
@@ -2672,9 +2666,9 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T42 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T42 DBG:", 0) != 0) name = "T42 DBG: " + name;
-                if (name.size() > 90) name = name.substr(0, 87) + "...";
+                std::string name = e.name.empty() ? "T43 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T43 DBG:", 0) != 0) name = "T43 DBG: " + name;
+                if (name.size() > 110) name = name.substr(0, 107) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
                 const float rowY = y + 66.0f + 13.0f * static_cast<float>(i);
@@ -2713,8 +2707,8 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST42", nativeAccent);
-        nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (STUECK/PREIS AUSGEBLENDET)", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST43", nativeAccent);
+        nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (NUR NAMENSKANDIDATEN)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
             nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
@@ -2722,9 +2716,9 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T42 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T42 DBG:", 0) != 0) name = "T42 DBG: " + name;
-                if (name.size() > 90) name = name.substr(0, 87) + "...";
+                std::string name = e.name.empty() ? "T43 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T43 DBG:", 0) != 0) name = "T43 DBG: " + name;
+                if (name.size() > 110) name = name.substr(0, 107) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
             }
