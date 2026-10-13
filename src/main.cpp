@@ -2329,7 +2329,7 @@ private:
                     if (diagLabel.empty()) diagLabel = "NO_NAME";
                     // Keep row text short enough for the existing Test31 column.
                     if (diagLabel.size() > 28) diagLabel.resize(28);
-                    entry.name = "DBG: " + diagLabel;
+                    entry.name = "T39 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2339,7 +2339,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "Item nicht erfasst";
+                if (entry.name.empty()) entry.name = "T39 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2665,7 +2665,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | INVENTARWERT");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST39");
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM");
         drawText(commands, x + 246.0f, y + 36.0f, 9.0f, accent, "STUECK");
         drawText(commands, x + 322.0f, y + 36.0f, 9.0f, accent, "PREIS/ST.");
@@ -2676,7 +2676,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "Unbekannt" : e.name;
+                std::string name = e.name.empty() ? "T39 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T39 DBG:", 0) != 0) name = "T39 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2731,7 +2732,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "Unbekannt" : e.name;
+                std::string name = e.name.empty() ? "T39 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T39 DBG:", 0) != 0) name = "T39 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 170.0f, name, nativeWhite);
