@@ -2317,7 +2317,7 @@ private:
                     // temporary diagnostic text, not a price/identity fallback.
                     // Keep the frozen panel geometry unchanged.
                     std::string diagLabel;
-                    // Test41 exposes the actual candidate list gathered from the
+                    // Test42 exposes the actual candidate list gathered from the
                     // Bedrock stack. The renderer keeps the existing row width and
                     // panel geometry; the visible prefix helps identify the source.
                     if (!debugDetails.empty()) diagLabel = debugDetails;
@@ -2325,8 +2325,8 @@ private:
                     else if (!candidates.empty()) diagLabel = candidates.front();
                     else diagLabel = rawName;
                     if (diagLabel.empty()) diagLabel = "NO_NAME";
-                    if (diagLabel.size() > 28) diagLabel.resize(28);
-                    entry.name = "T41 DBG: " + diagLabel;
+                    if (diagLabel.size() > 180) diagLabel.resize(180);
+                    entry.name = "T42 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2662,10 +2662,9 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST41");
-        drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM");
-        drawText(commands, x + 246.0f, y + 36.0f, 9.0f, accent, "STUECK");
-        drawText(commands, x + 322.0f, y + 36.0f, 9.0f, accent, "PREIS/ST.");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST42");
+        // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
+        drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
         if (entries.empty()) {
             drawText(commands, x + 12.0f, y + 70.0f, 10.0f, white, "Inventar wird gelesen...");
@@ -2673,16 +2672,14 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T41 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T41 DBG:", 0) != 0) name = "T41 DBG: " + name;
-                if (name.size() > 25) name = name.substr(0, 22) + "...";
+                std::string name = e.name.empty() ? "T42 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T42 DBG:", 0) != 0) name = "T42 DBG: " + name;
+                if (name.size() > 90) name = name.substr(0, 87) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
                 const float rowY = y + 66.0f + 13.0f * static_cast<float>(i);
                 drawText(commands, x + 12.0f, rowY, 9.0f, white, name);
-                drawText(commands, x + 250.0f, rowY, 9.0f, white, qty.str());
-                drawText(commands, x + 322.0f, rowY, 9.0f, white,
-                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
+                // Quantity and price columns are hidden in this diagnostic build.
             }
             if (entries.size() > shown) {
                 drawText(commands, x + 12.0f, y + 70.0f + 17.0f * static_cast<float>(shown),
@@ -2716,12 +2713,8 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | INVENTARWERT", nativeAccent);
-        // Each header/value uses its own fixed x-coordinate. Do not use spaces
-        // for alignment: Minecraft's font is proportional, so columns drift.
-        nativeAt(18.0f, 59.0f, 165.0f, "ITEM", nativeAccent);
-        nativeAt(180.0f, 59.0f, 235.0f, "STUECK", nativeAccent);
-        nativeAt(260.0f, 59.0f, 360.0f, "PREIS/ST.", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST42", nativeAccent);
+        nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (STUECK/PREIS AUSGEBLENDET)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
             nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
@@ -2729,14 +2722,11 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T41 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T41 DBG:", 0) != 0) name = "T41 DBG: " + name;
-                if (name.size() > 25) name = name.substr(0, 22) + "...";
+                std::string name = e.name.empty() ? "T42 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T42 DBG:", 0) != 0) name = "T42 DBG: " + name;
+                if (name.size() > 90) name = name.substr(0, 87) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
-                nativeAt(18.0f, rowY, 170.0f, name, nativeWhite);
-                nativeAt(180.0f, rowY, 235.0f, std::to_string(e.amount), nativeWhite);
-                nativeAt(260.0f, rowY, 360.0f,
-                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-", nativeWhite);
+                nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
             }
         }
         nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
