@@ -2706,16 +2706,16 @@ private:
             }
         };
         auto nativeLine = [&](float top, const std::string& text, const OpsuchtColor& color) {
-            nativeAt(18.0f, top, 620.0f, text, color);
+            nativeAt(18.0f, top, 360.0f, text, color);
         };
 
         nativeLine(42.0f, "OPVANTIS | INVENTARWERT", nativeAccent);
         // Each header/value uses its own fixed x-coordinate. Do not use spaces
         // for alignment: Minecraft's font is proportional, so columns drift.
-        nativeAt(18.0f, 59.0f, 240.0f, "ITEM", nativeAccent);
-        nativeAt(258.0f, 59.0f, 350.0f, "STUECK", nativeAccent);
-        nativeAt(368.0f, 59.0f, 520.0f, "PREIS/ST.", nativeAccent);
-        nativeLine(73.0f, "------------------------------------------------------", nativeMuted);
+        nativeAt(18.0f, 59.0f, 165.0f, "ITEM", nativeAccent);
+        nativeAt(180.0f, 59.0f, 235.0f, "STUECK", nativeAccent);
+        nativeAt(260.0f, 59.0f, 360.0f, "PREIS/ST.", nativeAccent);
+        nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
             nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
         } else {
@@ -2725,9 +2725,9 @@ private:
                 std::string name = e.name.empty() ? "Unbekannt" : e.name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
-                nativeAt(18.0f, rowY, 245.0f, name, nativeWhite);
-                nativeAt(310.0f, rowY, 350.0f, std::to_string(e.amount), nativeWhite);
-                nativeAt(416.0f, rowY, 550.0f,
+                nativeAt(18.0f, rowY, 170.0f, name, nativeWhite);
+                nativeAt(180.0f, rowY, 235.0f, std::to_string(e.amount), nativeWhite);
+                nativeAt(260.0f, rowY, 360.0f,
                          e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-", nativeWhite);
             }
         }
