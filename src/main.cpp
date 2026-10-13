@@ -777,109 +777,32 @@ public:
 
     PriceInfo findMatch(const std::string& rawName) const {
         const std::string fullKey = normalizeItemKeepPrefix(rawName);
-        std::string key = normalizeItem(rawName);
+        const std::string key = normalizeItem(rawName);
+        const std::string geyserPrefix = "geyser custom ";
 
         std::scoped_lock lock(mMutex);
 
-        // 1) Exact match against the normal API name.
+        // Only exact catalog identities are allowed. Never fuzzy-match: similar
+        // names can belong to different OPSUCHT custom items and prices.
         if (auto it = mPrices.find(key); it != mPrices.end()) return it->second;
-
-        // 2) Exact match against API aliases (identifier/material).
         if (auto it = mAliases.find(key); it != mAliases.end()) return it->second;
+        if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
 
-        // 3) Vanilla material fallback.
-        if (auto it = mMaterialPrices.find(key); it != mMaterialPrices.end()) return it->second;
-
-        // 4) Geyser custom items: use the full technical identifier only.
-        // Never fuzzy-match a custom identifier to a vanilla material. A custom
-        // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
-        const std::string geyserPrefix = "geyser custom ";
+        // For Geyser custom items, accept only an exact technical identifier.
+        // Do not derive a readable suffix: that can accidentally map one custom
+        // item to another item with a similar name.
         if (fullKey.rfind(geyserPrefix, 0) == 0) {
             const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
-
-            // Also try the API-side form with/without the Geyser presentation
-            // prefix.  The raw client id can be `geyser_custom_main_...`, while
-            // OPSUCHT commonly identifies the same custom item as just
-            // `main_...`.
-            const std::string fullTechnicalKey = normalizeItemKeepPrefix(rawName);
-            const std::string prefixlessTechnicalKey =
-                fullTechnicalKey.rfind(geyserPrefix, 0) == 0
-                    ? fullTechnicalKey.substr(geyserPrefix.size())
-                    : fullTechnicalKey;
-            if (auto it = mAliases.find(normalizeItem(prefixlessTechnicalKey)); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
-
-            // OPSUCHT may expose the custom item by its human-readable catalog
-            // name instead of the full Geyser technical identifier. Derive only
-            // the readable suffix (for example
-            // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
-            // and use EXACT matching. Never fall back to the vanilla material.
-            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
-            const std::string shortKey = normalizeItem(shortName);
-            if (!shortKey.empty()) {
-                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
-            }
-
+            const std::string prefixless = fullKey.substr(geyserPrefix.size());
+            if (auto it = mAliases.find(prefixless); it != mAliases.end()) return it->second;
+            if (auto it = mAliases.find(normalizeItem(prefixless)); it != mAliases.end()) return it->second;
             return {};
         }
 
-        // 5) Last-resort fuzzy matching is allowed only for ordinary vanilla
-        // display names. It is never reached for a Geyser custom identifier.
-        // "Item.netherite Pickaxe" when OPSUCHT exposes the same item under a
-        // slightly different display/material spelling. This is deliberately
-        // conservative and only accepts one clear winner.
-        auto makeTokens = [](const std::string& value) {
-            std::vector<std::string> tokens;
-            std::istringstream in(value);
-            std::string token;
-            while (in >> token) {
-                if (token.size() >= 3 && token != "item" && token != "minecraft" && token != "geyser" && token != "custom") {
-                    tokens.push_back(token);
-                }
-            }
-            return tokens;
-        };
-
-        const auto rawTokens = makeTokens(key);
-        const PriceInfo* best = nullptr;
-        double bestScore = 0.0;
-        double secondScore = 0.0;
-
-        auto consider = [&](const std::string& candidateKey, const PriceInfo& info) {
-            if (info.samples <= 0 || candidateKey.empty()) return;
-            const auto candidateTokens = makeTokens(candidateKey);
-            if (rawTokens.empty() || candidateTokens.empty()) return;
-
-            int hits = 0;
-            for (const auto& a : rawTokens) {
-                for (const auto& b : candidateTokens) {
-                    if (a == b || a.find(b) != std::string::npos || b.find(a) != std::string::npos) {
-                        ++hits;
-                        break;
-                    }
-                }
-            }
-            const double score = static_cast<double>(hits) / static_cast<double>(std::max(rawTokens.size(), candidateTokens.size()));
-            if (score > bestScore) {
-                secondScore = bestScore;
-                bestScore = score;
-                best = &info;
-            } else if (score > secondScore) {
-                secondScore = score;
-            }
-        };
-
-        for (const auto& [candidateKey, info] : mPrices) consider(candidateKey, info);
-        for (const auto& [candidateKey, info] : mMaterialPrices) consider(candidateKey, info);
-        for (const auto& [candidateKey, info] : mAliases) consider(candidateKey, info);
-
-        if (best && bestScore >= 0.50 && (bestScore - secondScore >= 0.10 || bestScore >= 0.80)) {
-            return *best;
-        }
-
+        // Vanilla material prices are safe only for an exact, non-custom
+        // material identity. Custom identifiers never reach this fallback.
+        if (auto it = mMaterialPrices.find(key); it != mMaterialPrices.end()) return it->second;
         return {};
     }
 
