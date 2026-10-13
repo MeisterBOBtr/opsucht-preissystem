@@ -883,8 +883,7 @@ public:
         return {};
     }
 
-    // Strict catalog lookup for a readable custom display name, prioritizing the
-    // exact OPSUCHT catalog alias (opsucht_name). Unlike
+    // Strict catalog lookup for a readable custom display name. Unlike
     // findMatch(), this never uses fuzzy matching or a vanilla-material fallback.
     // This is essential when several OPSUCHT custom items share one Bedrock type
     // (for example two talismans represented by the same totem item).
@@ -1212,6 +1211,9 @@ private:
                     PriceInfo info;
                     info.sum = avgPrice * static_cast<double>(samples);
                     info.samples = samples;
+                    // Prefer the explicit OPSUCHT catalog identity for display.
+                    // `name` can be a technical/base label, while `opsucht_name`
+                    // is the market-facing name used to distinguish custom items.
                     info.displayName = !opsuchtName.empty() ? opsuchtName : name;
                     info.displayKey = true;
 
@@ -1229,11 +1231,11 @@ private:
                     addKey(nextPrices, name);
                     addKey(nextAliases, name);
                     addKey(nextAliases, opsuchtName);
-                    // Keep minecraft_id out of the exact alias map. It is only a
-                    // base Bedrock type and can be shared by many OPSUCHT custom
-                    // items (e.g. Wolfstalisman and Unsichtbarkeitstalisman).
-                    // Base-material matching is handled separately and only when
-                    // the catalog proves that the material is unambiguous.
+                    // Do NOT add minecraft_id as an article alias. Multiple OPSUCHT
+                    // custom items (e.g. talismans, tool/armor tiers) can share one
+                    // Bedrock base ID; storing that ID here made the last article
+                    // overwrite the others. minecraft_id is handled only by the
+                    // unambiguous material fallback below.
 
                     // Only expose a material fallback when that material maps to
                     // one unambiguous article. This prevents custom items from
@@ -1241,7 +1243,7 @@ private:
                     if (!minecraftId.empty()) {
                         const std::string materialKey = normalizeItem(minecraftId);
                         auto owner = materialOwners.find(materialKey);
-                        const std::string articleKey = normalizeItem(!opsuchtName.empty() ? opsuchtName : name);
+                        const std::string articleKey = normalizeItem(!name.empty() ? name : opsuchtName);
                         if (owner == materialOwners.end()) {
                             materialOwners[materialKey] = articleKey;
                             nextMaterials[materialKey] = info;
@@ -2180,13 +2182,45 @@ private:
                     return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
                 });
 
-                // First resolve the actual custom display name as an exact
-                // catalog key. This distinguishes custom items that share a base
-                // Bedrock type (Totems, Axes, Armor, etc.).
+                // First resolve readable names exactly against the Supabase
+                // catalog. Do this before any technical/base identifiers so a
+                // generic NETHERITE_AXE or totem ID cannot win over the real
+                // OPSUCHT custom name.
                 if (!stackDisplayName.empty()) {
                     const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
                     if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
                         rawName = stackDisplayName;
+                    }
+                }
+
+                auto looksTechnical = [](const std::string& value) {
+                    const std::string n = normalizeItemKeepPrefix(value);
+                    if (n.rfind("minecraft:", 0) == 0 ||
+                        n.rfind("geyser custom ", 0) == 0 ||
+                        n.rfind("geyser_custom_", 0) == 0 ||
+                        n.rfind("item ", 0) == 0) return true;
+                    // Names such as NETHERITE_AXE are technical/base labels,
+                    // not the visible OPSUCHT market name.
+                    bool hasUnderscore = value.find('_') != std::string::npos;
+                    bool hasLetter = false;
+                    bool allLettersUpper = true;
+                    for (unsigned char c : value) {
+                        if (std::isalpha(c)) {
+                            hasLetter = true;
+                            if (!std::isupper(c)) allLettersUpper = false;
+                        }
+                    }
+                    return hasUnderscore && hasLetter && allLettersUpper;
+                };
+
+                if (rawName.empty()) {
+                    for (const auto& candidate : candidates) {
+                        if (candidate.empty() || looksTechnical(candidate)) continue;
+                        const PriceInfo namedMatch = mApi.findExactMatch(candidate);
+                        if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
+                            rawName = candidate;
+                            break;
+                        }
                     }
                 }
 
