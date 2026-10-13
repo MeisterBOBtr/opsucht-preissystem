@@ -110,9 +110,30 @@ jobs:
         run: |
           pwsh ./scripts/package.ps1 -Abi arm64-v8a
 
+      - name: Locate LeviPack
+        id: find_pack
+        if: success()
+        run: |
+          echo "Suche nach erzeugten .levipack-Dateien..."
+
+          find template -type f -name "*.levipack" -print
+
+          PACK="$(find template -type f -name "*.levipack" -print -quit)"
+
+          if [ -z "$PACK" ]; then
+            echo "Keine .levipack-Datei gefunden."
+            echo "Dateien im Template:"
+            find template -maxdepth 5 -type f | sort
+            exit 1
+          fi
+
+          echo "Gefundene Datei: $PACK"
+          echo "path=$PACK" >> "$GITHUB_OUTPUT"
+
       - name: Upload OPVANTIS Diagnose Test 16
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: OPVANTIS-Diagnose-Dauerpanel-Test16
-          path: template/build-arm64-v8a/*.levipack
+          path: ${{ steps.find_pack.outputs.path }}
           if-no-files-found: error
