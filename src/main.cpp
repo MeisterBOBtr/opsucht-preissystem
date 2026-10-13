@@ -2618,7 +2618,7 @@ private:
         // Compact design-only test: preserve the known working direct drawText
         // path, but align columns, remove the auction subtitle, and reserve room
         // for the total by limiting the visible list. Price/data logic is unchanged.
-        constexpr std::size_t kVisibleRows = 10;
+        constexpr std::size_t kVisibleRows = 18;
         std::ostringstream out;
         out << "OPVANTIS | INVENTARWERT\n";
         out << "ITEM                 STUECK  PREIS/ST.\n";
@@ -2645,7 +2645,7 @@ private:
         // Keep the existing renderer and position; adjust only visual layout.
         std::vector<pl::modmenu::DrawCommand> commands;
         commands.reserve(40);
-        constexpr float x = 18.0f, y = 42.0f, w = 420.0f, h = 330.0f;
+        constexpr float x = 18.0f, y = 42.0f, w = 420.0f, h = 350.0f;
         constexpr std::uint32_t bg = 0xE6101119;
         constexpr std::uint32_t accent = 0xFFD5A8FF;
         constexpr std::uint32_t border = 0xFF7435B0;
@@ -2671,7 +2671,7 @@ private:
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
-                const float rowY = y + 70.0f + 17.0f * static_cast<float>(i);
+                const float rowY = y + 66.0f + 13.0f * static_cast<float>(i);
                 drawText(commands, x + 12.0f, rowY, 9.0f, white, name);
                 drawText(commands, x + 250.0f, rowY, 9.0f, white, qty.str());
                 drawText(commands, x + 322.0f, rowY, 9.0f, white,
@@ -2689,13 +2689,37 @@ private:
                  "BEWERTETE ITEMS: " + std::to_string(pricedItems));
         pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".opvantis-panel", commands);
 
-        // Direct native text remains enabled to test overlay visibility above
-        // the inventory. This is intentionally separate from the styled layer.
-        std::string panelText = out.str();
-        OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 330.0f);
-        OpsuchtColor panelColor{1.0f, 1.0f, 1.0f, 1.0f};
-        sOriginalDrawText(uiContext, font, &panelRect, &panelText, &panelColor,
-                          1.0f, 0, textMeasure, caretMeasure);
+        // Native text is what remains visible above the inventory. Draw each
+        // line separately so colors and fixed columns survive that render path.
+        // Keep the compact font and 18 rows; no price/data logic is changed.
+        const OpsuchtColor nativeAccent{0.84f, 0.66f, 1.0f, 1.0f};
+        const OpsuchtColor nativeMuted{0.70f, 0.68f, 0.76f, 1.0f};
+        const OpsuchtColor nativeWhite{0.96f, 0.95f, 0.99f, 1.0f};
+        auto nativeLine = [&](float top, const std::string& text, const OpsuchtColor& color) {
+            OpsuchtRectangleArea rect = makePanelRect(18.0f, top, 620.0f, top + 14.0f);
+            sOriginalDrawText(uiContext, font, &rect, &text, const_cast<OpsuchtColor*>(&color),
+                              0.72f, 0, textMeasure, caretMeasure);
+        };
+        nativeLine(42.0f, "OPVANTIS | INVENTARWERT", nativeAccent);
+        nativeLine(59.0f, "ITEM                         STUECK     PREIS/ST.", nativeAccent);
+        nativeLine(73.0f, "------------------------------------------------------", nativeMuted);
+        if (entries.empty()) {
+            nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
+        } else {
+            const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
+            for (std::size_t i = 0; i < shownNative; ++i) {
+                const auto& e = entries[i];
+                std::string name = e.name.empty() ? "Unbekannt" : e.name;
+                if (name.size() > 25) name = name.substr(0, 22) + "...";
+                std::ostringstream line;
+                line << std::left << std::setw(27) << name
+                     << std::right << std::setw(6) << e.amount
+                     << std::setw(13) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
+                nativeLine(87.0f + 13.0f * static_cast<float>(i), line.str(), nativeWhite);
+            }
+        }
+        nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
+        nativeLine(341.0f, "BEWERTETE ITEMS: " + std::to_string(pricedItems), nativeMuted);
     }
 
     void drawInventoryOverlay(
