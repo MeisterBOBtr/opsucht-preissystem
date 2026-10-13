@@ -823,6 +823,46 @@ public:
                 if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
             }
 
+            // Test45: conservative suffix lookup for Geyser IDs whose technical
+            // tail contains the catalog identity plus an OPSUCHT prefix, e.g.
+            // `..._golden_excalibur` -> catalog `Excalibur`. Match only complete
+            // underscore-delimited suffixes of catalog names (never material IDs),
+            // require a meaningful key, and reject ties between different display
+            // names. This does not use the vanilla item/material fallback.
+            auto asUnderscoreKey = [](std::string value) {
+                for (char& c : value) {
+                    if (c == ' ') c = '_';
+                }
+                return value;
+            };
+            const std::string tech = normalizeTechnicalItemKey(rawName);
+            const PriceInfo* suffixMatch = nullptr;
+            std::string suffixDisplay;
+            std::size_t suffixLength = 0;
+            bool suffixAmbiguous = false;
+            auto considerSuffix = [&](const std::string& catalogKey, const PriceInfo& info) {
+                if (catalogKey.size() < 6 || info.samples <= 0 || info.sum <= 0.0) return;
+                const std::string suffix = asUnderscoreKey(catalogKey);
+                if (suffix.empty() || suffix.size() > tech.size()) return;
+                const bool matches = tech == suffix ||
+                    (tech.size() > suffix.size() &&
+                     tech.compare(tech.size() - suffix.size(), suffix.size(), suffix) == 0 &&
+                     tech[tech.size() - suffix.size() - 1] == '_');
+                if (!matches) return;
+                const std::string display = normalizeItem(info.displayName);
+                if (suffix.size() > suffixLength) {
+                    suffixLength = suffix.size();
+                    suffixMatch = &info;
+                    suffixDisplay = display;
+                    suffixAmbiguous = false;
+                } else if (suffix.size() == suffixLength && display != suffixDisplay) {
+                    suffixAmbiguous = true;
+                }
+            };
+            for (const auto& [catalogKey, info] : mPrices) considerSuffix(catalogKey, info);
+            for (const auto& [catalogKey, info] : mAliases) considerSuffix(catalogKey, info);
+            if (suffixMatch && !suffixAmbiguous) return *suffixMatch;
+
             return {};
         }
 
@@ -2310,7 +2350,7 @@ private:
                     // the Bedrock ItemStack on the existing item row. This is
                     // temporary diagnostic text, not a price/identity fallback.
                     // Keep the frozen panel geometry unchanged.
-                    // Test44: compactly report whether each Bedrock candidate has
+                    // Test45: report whether each Bedrock candidate resolves through the safe catalog lookup
                     // an EXACT catalog match in the currently loaded Supabase data.
                     // This distinguishes a naming/normalization issue from an item
                     // that simply has no priced catalog row. No fuzzy/base fallback.
@@ -2323,10 +2363,11 @@ private:
                     }
                     const std::size_t checkCount = std::min<std::size_t>(candidates.size(), 4);
                     for (std::size_t ci = 0; ci < checkCount; ++ci) {
-                        const auto exact = mApi.findExactMatch(candidates[ci]);
+                        const auto exact = mApi.findMatch(candidates[ci]);
                         diag << " c" << ci << ':';
                         if (exact.samples > 0 && exact.sum > 0.0) {
-                            diag << "YES$" << static_cast<long long>(exact.sum / exact.samples);
+                            diag << "MATCH=" << exact.displayName << "$"
+                                 << static_cast<long long>(exact.sum / exact.samples);
                         } else {
                             diag << "NO";
                         }
@@ -2345,7 +2386,7 @@ private:
                     }
                     std::string diagLabel = diag.str();
                     if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T44 DBG: " + diagLabel;
+                    entry.name = "T45 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2355,7 +2396,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T40 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "T45 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2681,7 +2722,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST44");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST45");
         // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
@@ -2691,8 +2732,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T44 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T44 DBG:", 0) != 0) name = "T44 DBG: " + name;
+                std::string name = e.name.empty() ? "T45 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T45 DBG:", 0) != 0) name = "T45 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2732,7 +2773,7 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST44", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST45", nativeAccent);
         nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (EXAKTER SUPABASE-TREFFER)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
@@ -2741,8 +2782,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T44 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T44 DBG:", 0) != 0) name = "T44 DBG: " + name;
+                std::string name = e.name.empty() ? "T45 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T45 DBG:", 0) != 0) name = "T45 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
