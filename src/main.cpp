@@ -2695,16 +2695,26 @@ private:
         const OpsuchtColor nativeAccent{0.84f, 0.66f, 1.0f, 1.0f};
         const OpsuchtColor nativeMuted{0.70f, 0.68f, 0.76f, 1.0f};
         const OpsuchtColor nativeWhite{0.96f, 0.95f, 0.99f, 1.0f};
-        auto nativeLine = [&](float top, const std::string& text, const OpsuchtColor& color) {
-            OpsuchtRectangleArea rect = makePanelRect(18.0f, top, 620.0f, top + 14.0f);
+        auto nativeAt = [&](float left, float top, float right,
+                            const std::string& text, const OpsuchtColor& color) {
+            OpsuchtRectangleArea rect = makePanelRect(left, top, right, top + 14.0f);
             if (sOriginalDrawText) {
                 void* nativeColor = const_cast<OpsuchtColor*>(&color);
-                sOriginalDrawText(uiContext, font, &rect, const_cast<std::string*>(&text),
-                                  nativeColor, 0.72f, 0, textMeasure, caretMeasure);
+                sOriginalDrawText(uiContext, font, &rect,
+                                  const_cast<std::string*>(&text), nativeColor,
+                                  0.72f, 0, textMeasure, caretMeasure);
             }
         };
+        auto nativeLine = [&](float top, const std::string& text, const OpsuchtColor& color) {
+            nativeAt(18.0f, top, 620.0f, text, color);
+        };
+
         nativeLine(42.0f, "OPVANTIS | INVENTARWERT", nativeAccent);
-        nativeLine(59.0f, "ITEM                         STUECK     PREIS/ST.", nativeAccent);
+        // Each header/value uses its own fixed x-coordinate. Do not use spaces
+        // for alignment: Minecraft's font is proportional, so columns drift.
+        nativeAt(18.0f, 59.0f, 240.0f, "ITEM", nativeAccent);
+        nativeAt(258.0f, 59.0f, 350.0f, "STUECK", nativeAccent);
+        nativeAt(368.0f, 59.0f, 520.0f, "PREIS/ST.", nativeAccent);
         nativeLine(73.0f, "------------------------------------------------------", nativeMuted);
         if (entries.empty()) {
             nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
@@ -2714,11 +2724,11 @@ private:
                 const auto& e = entries[i];
                 std::string name = e.name.empty() ? "Unbekannt" : e.name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
-                std::ostringstream line;
-                line << std::left << std::setw(27) << name
-                     << std::right << std::setw(6) << e.amount
-                     << std::setw(13) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
-                nativeLine(87.0f + 13.0f * static_cast<float>(i), line.str(), nativeWhite);
+                const float rowY = 87.0f + 13.0f * static_cast<float>(i);
+                nativeAt(18.0f, rowY, 245.0f, name, nativeWhite);
+                nativeAt(310.0f, rowY, 350.0f, std::to_string(e.amount), nativeWhite);
+                nativeAt(416.0f, rowY, 550.0f,
+                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-", nativeWhite);
             }
         }
         nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
