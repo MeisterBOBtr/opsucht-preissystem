@@ -889,6 +889,30 @@ public:
                 const std::string translatedKey = normalizeItem(catalogPhrase);
                 if (auto it = mPrices.find(translatedKey); it != mPrices.end()) return it->second;
                 if (auto it = mAliases.find(translatedKey); it != mAliases.end()) return it->second;
+
+                // Test48: the catalog can expose the market-facing display name
+                // while its internal key was built from a different `name` field.
+                // Search by the actual loaded displayName as a second exact check.
+                // If multiple rows with the same display name disagree on price,
+                // reject the alias rather than selecting an arbitrary price.
+                const PriceInfo* displayMatch = nullptr;
+                bool displayAmbiguous = false;
+                auto considerDisplayName = [&](const auto& entries) {
+                    for (const auto& [unusedKey, info] : entries) {
+                        if (normalizeItem(info.displayName) != translatedKey ||
+                            info.samples <= 0 || info.sum <= 0.0) continue;
+                        if (!displayMatch) {
+                            displayMatch = &info;
+                        } else {
+                            const double firstAvg = displayMatch->sum / displayMatch->samples;
+                            const double nextAvg = info.sum / info.samples;
+                            if (std::abs(firstAvg - nextAvg) > 0.5) displayAmbiguous = true;
+                        }
+                    }
+                };
+                considerDisplayName(mPrices);
+                considerDisplayName(mAliases);
+                if (displayMatch && !displayAmbiguous) return *displayMatch;
             }
 
             return {};
@@ -2414,7 +2438,7 @@ private:
                     }
                     std::string diagLabel = diag.str();
                     if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T47 DBG: " + diagLabel;
+                    entry.name = "T48 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2424,7 +2448,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T47 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "T48 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2750,7 +2774,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST47");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST48");
         // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
@@ -2760,8 +2784,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T47 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T47 DBG:", 0) != 0) name = "T47 DBG: " + name;
+                std::string name = e.name.empty() ? "T48 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T48 DBG:", 0) != 0) name = "T48 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2801,7 +2825,7 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST47", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST48", nativeAccent);
         nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (EXAKTER SUPABASE-TREFFER)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
@@ -2810,8 +2834,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T47 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T47 DBG:", 0) != 0) name = "T47 DBG: " + name;
+                std::string name = e.name.empty() ? "T48 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T48 DBG:", 0) != 0) name = "T48 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
