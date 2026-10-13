@@ -2615,38 +2615,37 @@ private:
             pricedItems = mLastPricedItems;
         }
 
+        // Compact design-only test: preserve the known working direct drawText
+        // path, but align columns, remove the auction subtitle, and reserve room
+        // for the total by limiting the visible list. Price/data logic is unchanged.
+        constexpr std::size_t kVisibleRows = 10;
         std::ostringstream out;
-        out << "OPVANTIS - INVENTARWERT\n";
-        out << "AUKTIONSANZEIGE | OPSUCHT\n";
-        out << "ITEM                         MENGE       PREIS/ST.\n";
-        out << "-----------------------------------------------\n";
+        out << "OPVANTIS | INVENTARWERT\n";
+        out << "ITEM                 STUECK  PREIS/ST.\n";
+        out << "---------------------------------------\n";
         if (entries.empty()) {
             out << "Inventar wird gelesen...\n";
         } else {
-            const std::size_t shown = std::min<std::size_t>(entries.size(), 18);
+            const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 std::string name = entries[i].name.empty() ? "Unbekannt" : entries[i].name;
-                if (name.size() > 23) name = name.substr(0, 20) + "...";
-                out << std::left << std::setw(25) << name
-                    << std::right << std::setw(6) << entries[i].amount << "    "
-                    << std::setw(10)
+                if (name.size() > 20) name = name.substr(0, 17) + "...";
+                out << std::left << std::setw(20) << name
+                    << std::right << std::setw(6) << entries[i].amount
+                    << std::setw(11)
                     << (entries[i].unitPrice > 0.0 ? formatMoney(entries[i].unitPrice) : "-")
                     << "\n";
             }
             if (entries.size() > shown) out << "+ " << (entries.size() - shown) << " weitere Items\n";
         }
-        out << "-----------------------------------------------\n";
+        out << "---------------------------------------\n";
         out << "GESAMTWERT: " << formatMoney(total) << "\n";
-        out << "BEWERTETE ITEMS: " << pricedItems << "\n";
-        out << "TEST 26: STABILITAETSTEST";
+        out << "BEWERTETE ITEMS: " << pricedItems;
 
-        // TEST 27: keep the proven direct drawText path for visibility over
-        // inventory, and restore the OPVANTIS dark/purple panel styling through
-        // the existing draw-command API. The native text path remains the
-        // fallback for the actual item data if the background layer is occluded.
+        // Keep the existing renderer and position; adjust only visual layout.
         std::vector<pl::modmenu::DrawCommand> commands;
         commands.reserve(40);
-        constexpr float x = 18.0f, y = 42.0f, w = 420.0f, h = 420.0f;
+        constexpr float x = 18.0f, y = 42.0f, w = 420.0f, h = 330.0f;
         constexpr std::uint32_t bg = 0xE6101119;
         constexpr std::uint32_t accent = 0xFFD5A8FF;
         constexpr std::uint32_t border = 0xFF7435B0;
@@ -2657,69 +2656,46 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS - INVENTARWERT");
-        drawText(commands, x + 12.0f, y + 32.0f, 10.0f, muted, "AUKTIONSANZEIGE | OPSUCHT");
-        drawText(commands, x + 12.0f, y + 52.0f, 10.0f, accent, "ITEM                         MENGE       PREIS/ST.");
-        drawText(commands, x + 12.0f, y + 70.0f, 9.0f, muted, "-----------------------------------------------");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | INVENTARWERT");
+        drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM");
+        drawText(commands, x + 246.0f, y + 36.0f, 9.0f, accent, "STUECK");
+        drawText(commands, x + 322.0f, y + 36.0f, 9.0f, accent, "PREIS/ST.");
+        drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
         if (entries.empty()) {
-            drawText(commands, x + 12.0f, y + 91.0f, 10.0f, white, "Inventar wird gelesen...");
+            drawText(commands, x + 12.0f, y + 70.0f, 10.0f, white, "Inventar wird gelesen...");
         } else {
-            const std::size_t shown = std::min<std::size_t>(entries.size(), 14);
+            const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
                 std::string name = e.name.empty() ? "Unbekannt" : e.name;
-                if (name.size() > 22) name = name.substr(0, 19) + "...";
-                std::ostringstream row;
-                row << std::left << std::setw(22) << name << "  "
-                    << std::right << std::setw(4) << e.amount << "   "
-                    << std::setw(9) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
-                drawText(commands, x + 12.0f, y + 91.0f + 19.0f * static_cast<float>(i), 9.0f, white, row.str());
+                if (name.size() > 25) name = name.substr(0, 22) + "...";
+                std::ostringstream qty;
+                qty << e.amount;
+                const float rowY = y + 70.0f + 17.0f * static_cast<float>(i);
+                drawText(commands, x + 12.0f, rowY, 9.0f, white, name);
+                drawText(commands, x + 250.0f, rowY, 9.0f, white, qty.str());
+                drawText(commands, x + 322.0f, rowY, 9.0f, white,
+                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
+            }
+            if (entries.size() > shown) {
+                drawText(commands, x + 12.0f, y + 70.0f + 17.0f * static_cast<float>(shown),
+                         8.0f, muted, "+ weitere Items in Inventar erkannt");
             }
         }
+        drawRect(commands, x + 10.0f, y + h - 55.0f, w - 20.0f, 1.0f, border);
         drawText(commands, x + 12.0f, y + h - 43.0f, 10.0f, muted, "GESAMTWERT");
         drawText(commands, x + 132.0f, y + h - 43.0f, 11.0f, accent, formatMoney(total));
+        drawText(commands, x + 12.0f, y + h - 25.0f, 8.0f, muted,
+                 "BEWERTETE ITEMS: " + std::to_string(pricedItems));
         pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".opvantis-panel", commands);
 
-        // DESIGN-ONLY TEST: keep Test 27's proven native drawText path, but
-        // draw each line separately so the title, headings and total can use
-        // OPVANTIS purple accents. No inventory, price, API, or timing logic
-        // is changed. The ModMenu background/border commands above are kept.
-        const OpsuchtColor titleColor{0.84f, 0.66f, 1.00f, 1.00f};
-        const OpsuchtColor accentColor{0.68f, 0.42f, 0.92f, 1.00f};
-        const OpsuchtColor mutedColor{0.72f, 0.75f, 0.82f, 1.00f};
-        const OpsuchtColor whiteColor{0.96f, 0.96f, 0.98f, 1.00f};
-        auto nativeLine = [&](float y, const std::string& text, const OpsuchtColor& color,
-                              float left = 18.0f, float right = 640.0f) {
-            OpsuchtRectangleArea lineRect = makePanelRect(left, y, right, y + 20.0f);
-            std::string lineText = text;
-            sOriginalDrawText(uiContext, font, &lineRect, &lineText,
-                              const_cast<OpsuchtColor*>(&color), 1.0f, 0,
-                              textMeasure, caretMeasure);
-        };
-
-        nativeLine(42.0f,  "OPVANTIS  |  INVENTARWERT", titleColor);
-        nativeLine(63.0f,  "AUKTIONSANZEIGE  /  OPSUCHT", mutedColor);
-        nativeLine(84.0f,  "ITEM                         MENGE       PREIS/ST.", accentColor);
-        nativeLine(101.0f, "-----------------------------------------------", mutedColor);
-        if (entries.empty()) {
-            nativeLine(122.0f, "Inventar wird gelesen...", whiteColor);
-        } else {
-            const std::size_t shown = std::min<std::size_t>(entries.size(), 14);
-            for (std::size_t i = 0; i < shown; ++i) {
-                const auto& e = entries[i];
-                std::string name = e.name.empty() ? "Unbekannt" : e.name;
-                if (name.size() > 22) name = name.substr(0, 19) + "...";
-                std::ostringstream row;
-                row << std::left << std::setw(22) << name << "  "
-                    << std::right << std::setw(4) << e.amount << "   "
-                    << std::setw(9) << (e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
-                nativeLine(122.0f + 18.0f * static_cast<float>(i), row.str(), whiteColor);
-            }
-        }
-        nativeLine(390.0f, "-----------------------------------------------", mutedColor);
-        nativeLine(411.0f, "GESAMTWERT: " + formatMoney(total), titleColor);
-        nativeLine(432.0f, "BEWERTETE ITEMS: " + std::to_string(pricedItems), mutedColor);
-        nativeLine(453.0f, "OPVANTIS  /  STABILITAETSTEST", accentColor);
+        // Direct native text remains enabled to test overlay visibility above
+        // the inventory. This is intentionally separate from the styled layer.
+        std::string panelText = out.str();
+        OpsuchtRectangleArea panelRect = makePanelRect(18.0f, 42.0f, 620.0f, 330.0f);
+        OpsuchtColor panelColor{1.0f, 1.0f, 1.0f, 1.0f};
+        sOriginalDrawText(uiContext, font, &panelRect, &panelText, &panelColor,
+                          1.0f, 0, textMeasure, caretMeasure);
     }
 
     void drawInventoryOverlay(
