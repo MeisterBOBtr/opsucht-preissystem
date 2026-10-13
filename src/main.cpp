@@ -793,7 +793,7 @@ public:
         // 4) Geyser custom items: use the full technical identifier only.
         // Never fuzzy-match a custom identifier to a vanilla material. A custom
         // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
-        const std::string geyserPrefix = "geyser custom ";
+        const std::string geyserPrefix = "geyser custom";
         if (fullKey.rfind(geyserPrefix, 0) == 0) {
             const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
@@ -872,6 +872,8 @@ public:
                 {"beach_shovel", "strandschaufel"},
                 {"berserk_axe", "berserkeraxt"},
                 {"bone_pickaxe", "knochenspitzhacke"},
+                {"sweetdreamzzz_pickaxe", "sweetdreamzzz_traumpicke"},
+                {"sweetdreamzzz_pickaxe", "sweetdreamzzz_herbstpicke"},
                 {"golden_excalibur", "excalibur"},
                 {"rust_shovel", "rostschaufel"},
                 {"pearl_pickaxe", "perlenspitzhacke"},
@@ -2239,7 +2241,7 @@ private:
                 // is only a normal netherite pickaxe.
                 clearPriceCacheIfApiChanged();
                 const bool isGeyserCustom = std::any_of(candidates.begin(), candidates.end(), [](const std::string& candidate) {
-                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
+                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom", 0) == 0;
                 });
 
                 // First resolve readable names exactly against the Supabase
@@ -2256,7 +2258,7 @@ private:
                 auto looksTechnical = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
                     if (n.rfind("minecraft:", 0) == 0 ||
-                        n.rfind("geyser custom ", 0) == 0 ||
+                        n.rfind("geyser custom", 0) == 0 ||
                         n.rfind("geyser_custom_", 0) == 0 ||
                         n.rfind("item ", 0) == 0) return true;
                     // Names such as NETHERITE_AXE are technical/base labels,
@@ -2291,7 +2293,7 @@ private:
                     // Only try the full technical custom identity; the strict
                     // display-name lookup above handles readable custom names.
                     if (isGeyserCustom &&
-                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
+                        normalizeItemKeepPrefix(candidate).rfind("geyser custom", 0) != 0) {
                         continue;
                     }
                     const PriceInfo match = cachedMatch(candidate);
@@ -2306,7 +2308,7 @@ private:
                 // price such as 70,000 $ for a >100M $ custom item.
                 if (isGeyserCustom && rawName.empty()) {
                     for (const auto& candidate : candidates) {
-                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0) {
+                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom", 0) == 0) {
                             rawName = candidate;
                             break;
                         }
@@ -2335,7 +2337,7 @@ private:
                     rawNormalized.rfind("minecraft:", 0) == 0 ||
                     rawNormalized.rfind("minecraft ", 0) == 0 ||
                     rawNormalized.rfind("item ", 0) == 0;
-                if (rawNormalized.rfind("geyser custom ", 0) == 0 ||
+                if (rawNormalized.rfind("geyser custom", 0) == 0 ||
                     rawNormalized.rfind("geyser_custom_", 0) == 0) {
                     rawIsTechnicalBase = false;
                 } else {
@@ -2364,7 +2366,7 @@ private:
                 // technical Geyser identifier (or its compact form) as the HUD name.
                 const auto isTechnicalGeyserName = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
-                    return n.rfind("geyser custom ", 0) == 0 ||
+                    return n.rfind("geyser custom", 0) == 0 ||
                            n.rfind("geyser_custom_", 0) == 0;
                 };
                 // Items are considered registered only when the Supabase catalog
@@ -2412,7 +2414,7 @@ private:
                     }
                     std::string diagLabel = diag.str();
                     if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T46 DBG: " + diagLabel;
+                    entry.name = "T47 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2422,7 +2424,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T46 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "T47 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2748,7 +2750,7 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST46");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST47");
         // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
         drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
@@ -2758,8 +2760,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T46 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T46 DBG:", 0) != 0) name = "T46 DBG: " + name;
+                std::string name = e.name.empty() ? "T47 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T47 DBG:", 0) != 0) name = "T47 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2799,7 +2801,7 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST46", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | DIAG TEST47", nativeAccent);
         nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (EXAKTER SUPABASE-TREFFER)", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
@@ -2808,8 +2810,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T46 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T46 DBG:", 0) != 0) name = "T46 DBG: " + name;
+                std::string name = e.name.empty() ? "T47 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T47 DBG:", 0) != 0) name = "T47 DBG: " + name;
                 if (name.size() > 110) name = name.substr(0, 107) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
