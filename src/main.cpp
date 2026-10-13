@@ -2329,7 +2329,7 @@ private:
                     if (diagLabel.empty()) diagLabel = "NO_NAME";
                     // Keep row text short enough for the existing Test31 column.
                     if (diagLabel.size() > 28) diagLabel.resize(28);
-                    entry.name = "T39 DBG: " + diagLabel;
+                    entry.name = "T40 DBG: " + diagLabel;
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2339,7 +2339,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T39 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "T40 DBG: NO_NAME";
 
                 entry.amount =
                     static_cast<int>(
@@ -2676,8 +2676,8 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T39 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T39 DBG:", 0) != 0) name = "T39 DBG: " + name;
+                std::string name = e.name.empty() ? "T40 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T40 DBG:", 0) != 0) name = "T40 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 std::ostringstream qty;
                 qty << e.amount;
@@ -2732,8 +2732,8 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T39 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T39 DBG:", 0) != 0) name = "T39 DBG: " + name;
+                std::string name = e.name.empty() ? "T40 DBG: EMPTY_NAME" : e.name;
+                if (e.unitPrice <= 0.0 && name.rfind("T40 DBG:", 0) != 0) name = "T40 DBG: " + name;
                 if (name.size() > 25) name = name.substr(0, 22) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
                 nativeAt(18.0f, rowY, 170.0f, name, nativeWhite);
