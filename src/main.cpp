@@ -883,6 +883,22 @@ public:
         return {};
     }
 
+    // Strict catalog lookup for a readable custom display name. Unlike
+    // findMatch(), this never uses fuzzy matching or a vanilla-material fallback.
+    // This is essential when several OPSUCHT custom items share one Bedrock type
+    // (for example two talismans represented by the same totem item).
+    PriceInfo findExactMatch(const std::string& rawName) const {
+        if (rawName.empty()) return {};
+        const std::string key = normalizeItem(rawName);
+        const std::string fullKey = normalizeItemKeepPrefix(rawName);
+        std::scoped_lock lock(mMutex);
+        if (auto it = mPrices.find(key); it != mPrices.end()) return it->second;
+        if (auto it = mAliases.find(key); it != mAliases.end()) return it->second;
+        if (auto it = mPrices.find(fullKey); it != mPrices.end()) return it->second;
+        if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
+        return {};
+    }
+
     double getPrice(const std::string& name) const {
         const auto match = findMatch(name);
         return match.samples > 0 ? match.sum / match.samples : 0.0;
@@ -2159,7 +2175,26 @@ private:
                     return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
                 });
 
+                // First resolve the actual custom display name as an exact
+                // catalog key. This distinguishes custom items that share a base
+                // Bedrock type (Totems, Axes, Armor, etc.).
+                if (!stackDisplayName.empty()) {
+                    const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
+                    if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
+                        rawName = stackDisplayName;
+                    }
+                }
+
                 for (const auto& candidate : candidates) {
+                    if (!rawName.empty()) break;
+                    // For Geyser/OPSUCHT custom items, never let a generic base
+                    // material such as totem, axe, helmet, or chestplate win.
+                    // Only try the full technical custom identity; the strict
+                    // display-name lookup above handles readable custom names.
+                    if (isGeyserCustom &&
+                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
+                        continue;
+                    }
                     const PriceInfo match = cachedMatch(candidate);
                     if (match.samples > 0 && (match.sum / match.samples) > 0.0) {
                         rawName = candidate;
