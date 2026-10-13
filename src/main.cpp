@@ -2266,7 +2266,31 @@ private:
 
                 ++mDiagRawOk;
 
-                const PriceInfo resolved = cachedMatch(rawName);
+                // Final safety net: never assign a price from a technical base
+                // identifier alone. If Bedrock does not expose a readable custom
+                // name or a unique Geyser identifier, leave it unpriced rather
+                // than showing another OPSUCHT item's price.
+                const std::string rawNormalized = normalizeItemKeepPrefix(rawName);
+                bool rawIsTechnicalBase =
+                    rawNormalized.rfind("minecraft:", 0) == 0 ||
+                    rawNormalized.rfind("minecraft ", 0) == 0 ||
+                    rawNormalized.rfind("item ", 0) == 0;
+                if (rawNormalized.rfind("geyser custom ", 0) == 0 ||
+                    rawNormalized.rfind("geyser_custom_", 0) == 0) {
+                    rawIsTechnicalBase = false;
+                } else {
+                    const bool hasUnderscore = rawName.find('_') != std::string::npos;
+                    bool hasLetter = false;
+                    bool allLettersUpper = true;
+                    for (unsigned char c : rawName) {
+                        if (std::isalpha(c)) {
+                            hasLetter = true;
+                            if (!std::isupper(c)) allLettersUpper = false;
+                        }
+                    }
+                    if (hasUnderscore && hasLetter && allLettersUpper) rawIsTechnicalBase = true;
+                }
+                const PriceInfo resolved = rawIsTechnicalBase ? PriceInfo{} : cachedMatch(rawName);
                 const double price = resolved.samples > 0
                     ? resolved.sum / resolved.samples
                     : 0.0;
