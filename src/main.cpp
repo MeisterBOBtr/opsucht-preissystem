@@ -55,21 +55,12 @@ namespace {
 constexpr std::string_view kModuleId =
     "opvantis.overlay";
 
-constexpr const char* kApiBaseUrl =
-    "https://api.opsucht.net/auctions";
-constexpr const char* kApiActiveUrl =
-    "https://api.opsucht.net/auctions/active";
-constexpr const char* kApiCategoriesUrl =
-    "https://api.opsucht.net/auctions/categories";
-constexpr const char* kApiStreamUrl =
-    "https://api.opsucht.net/auctions/stream";
+constexpr const char* kSupabasePricesUrl =
+    "https://opeinegbcqqqreuxpdqh.supabase.co/functions/v1/opvantis-inventory-prices";
 
-// The API is deliberately a fixed background data source. The HUD does not
-// depend on the inventory screen to fetch prices. Active auctions are refreshed
-// periodically and the last successful snapshot remains available if a later
-// request fails. The stream endpoint is documented by OPSUCHT and kept as the
-// future low-latency update path; polling is used here because it is safer for
-// Android/JNI networking and does not hold a blocking SSE connection open.
+// Read-only snapshot from Supabase. The mod never writes to Supabase and does
+// not call the OPSUCHT API directly. The endpoint averages the five newest
+// price records for each article and returns the article name plus aliases.
 constexpr int kApiRefreshSeconds = 30;
 constexpr int kInventoryRefreshTicks = 40; // once every 2 seconds at 20 TPS to reduce main-thread work
 constexpr int kPriceCacheTicks = 80; // keep resolved item prices for ~4 seconds
@@ -427,6 +418,37 @@ static std::string jsonString(
     return {};
 }
 
+static std::string jsonArrayField(const std::string& object, const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    std::size_t p = object.find(needle);
+    if (p == std::string::npos) return {};
+    p = object.find(':', p + needle.size());
+    if (p == std::string::npos) return {};
+    ++p;
+    while (p < object.size() && std::isspace(static_cast<unsigned char>(object[p]))) ++p;
+    if (p >= object.size() || object[p] != '[') return {};
+    const std::size_t start = p;
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (; p < object.size(); ++p) {
+        const char c = object[p];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == '"') inString = false;
+            continue;
+        }
+        if (c == '"') { inString = true; continue; }
+        if (c == '[') ++depth;
+        else if (c == ']') {
+            --depth;
+            if (depth == 0) return object.substr(start, p - start + 1);
+        }
+    }
+    return {};
+}
+
 static std::string jsonObjectField(const std::string& object, const std::string& key);
 
 static std::string jsonStringDeep(
@@ -717,23 +739,23 @@ class OpsuchtApi {
 
 public:
 
-    // OPVANTIS UI/performance test: no networking is started here.
-    // The mod must not poll the OPSUCHT API. Supabase read-only loading will
-    // be added as a separate step after the UI/rendering behavior is stable.
+    // Start a background, read-only Supabase snapshot loader. Rendering never
+    // performs network requests, and the previous price snapshot remains in
+    // memory if a later request fails.
     void start(ll::mod::NativeMod& self) {
         stop();
         mSelf = &self;
-        mStop = true;
+        mStop = false;
+        mThread = std::thread([this]() { worker(); });
         if (mSelf) {
             mSelf->getLogger().info(
-                "OPVANTIS UI-Test: direkte Opsucht-API-Abfragen deaktiviert"
+                "OPVANTIS: read-only Supabase-Preisquelle gestartet"
             );
         }
     }
 
     void stop() {
         mStop = true;
-        // No background worker is started in this build.
         if (mThread.joinable()) {
             mThread.join();
         }
@@ -1147,226 +1169,92 @@ private:
     }
 
     void worker() {
-
-        auto lastCategoryRefresh = std::chrono::steady_clock::now() - std::chrono::seconds(kApiCategoriesRefreshSeconds);
-
         while (!mStop.load()) {
-
-            // 1) Active auctions are the permanent price source.
-            const std::string json =
-                httpGet(kApiActiveUrl);
-
+            const std::string json = httpGet(kSupabasePricesUrl);
             mApiResponseBytes.store(json.size());
-            if (json.empty()) {
-                mApiAuctionCount.store(0);
-            } else {
-                std::size_t activeCount = 0;
-                for (const auto& obj : jsonObjects(json)) {
-                    // An auction object contains the nested "item" object.
-                    // Nested item objects themselves do not, so this avoids
-                    // counting the same auction multiple times.
-                    if (obj.find("\"item\"") != std::string::npos) {
-                        ++activeCount;
-                    }
-                }
-                mApiAuctionCount.store(activeCount);
-            }
 
-            if (!json.empty()) {
-
-                std::unordered_map<std::string, PriceInfo> sums;
-                std::unordered_map<std::string, PriceInfo> aliasSums;
+            const std::string itemsJson = jsonArrayField(json, "items");
+            if (!itemsJson.empty() && json.find("\"success\":true") != std::string::npos) {
+                std::unordered_map<std::string, PriceInfo> nextPrices;
+                std::unordered_map<std::string, PriceInfo> nextAliases;
+                std::unordered_map<std::string, PriceInfo> nextMaterials;
                 std::unordered_map<std::string, std::string> materialOwners;
-                std::unordered_map<std::string, PriceInfo> materialSums;
-                std::unordered_map<std::string, bool> materialAmbiguous;
+                std::unordered_map<std::string, bool> ambiguousMaterials;
+                std::size_t loaded = 0;
 
-                // /auctions/active returns auction objects whose item data is nested
-                // under "item".  The API price is on the auction itself.
-                for (const auto& object : jsonObjects(json)) {
-                    // The live API keeps the actual item data inside `item`.
-                    // Read that object first so custom OPSUCHT/Geyser items keep
-                    // their real display name and identifier.
-                    const std::string itemObject = jsonObjectField(object, "item");
-                    const std::string& itemData = itemObject.empty() ? object : itemObject;
+                for (const auto& object : jsonObjects(itemsJson)) {
+                    const std::string name = jsonString(object, {"name"});
+                    const std::string opsuchtName = jsonString(object, {"opsucht_name"});
+                    const std::string minecraftId = jsonString(object, {"minecraft_id"});
+                    if (name.empty() && opsuchtName.empty() && minecraftId.empty()) continue;
 
-                    const std::string displayName = jsonStringDeep(itemData, {
-                        "displayName", "display_name", "itemDisplayName", "item_display_name",
-                        "itemName", "item_name", "name"
-                    });
-                    const std::string material = jsonStringDeep(itemData, {
-                        "material", "type", "typeName", "type_name"
-                    });
-                    const std::string itemIdentifier = jsonStringDeep(itemData, {
-                        "itemId", "item_id", "identifier", "itemIdentifier", "item_identifier", "key", "id"
-                    });
-                    if (displayName.empty() && material.empty() && itemIdentifier.empty()) continue;
+                    const double avgPrice = jsonNumber(object, {"avg_price"});
+                    const int samples = static_cast<int>(jsonNumber(object, {"samples"}));
+                    if (avgPrice <= 0.0 || samples <= 0) continue;
 
-                    // Prefer the live bid. If nobody has bid yet, use the start bid;
-                    // if that is also zero, use the instant-buy price.
-                    double price = jsonNumberDeep(object, {"currentBid", "current_bid", "bid", "currentPrice", "current_price"});
-                    if (price <= 0.0) price = jsonNumberDeep(object, {"startBid", "start_bid", "startPrice", "start_price"});
-                    if (price <= 0.0) price = jsonNumberDeep(object, {"instantBuyPrice", "instant_buy_price", "buyNowPrice", "buy_now_price", "price"});
-                    if (price <= 0.0) continue;
+                    PriceInfo info;
+                    info.sum = avgPrice * static_cast<double>(samples);
+                    info.samples = samples;
+                    info.displayName = !name.empty() ? name : opsuchtName;
+                    info.displayKey = true;
 
-                    double quantity = jsonNumberDeep(itemData, {
-                        "amount", "quantity", "itemAmount", "item_amount", "count"
-                    });
-                    if (quantity <= 0.0) {
-                        quantity = jsonNumberDeep(object, {
-                            "amount", "quantity", "itemAmount", "item_amount", "count"
-                        });
-                    }
-                    const double unitPrice = quantity > 0.0 ? price / quantity : price;
-                    if (unitPrice <= 0.0) continue;
-
-                    const std::string shown = !displayName.empty() ? displayName : material;
-
-                    if (!material.empty()) {
-                        const std::string materialKey = normalizeItem(material);
-                        if (!displayName.empty()) {
-                            auto owner = materialOwners.find(materialKey);
-                            if (owner == materialOwners.end()) {
-                                materialOwners[materialKey] = normalizeItem(displayName);
-                            } else if (owner->second != normalizeItem(displayName)) {
-                                materialAmbiguous[materialKey] = true;
-                            }
-                        }
-                        auto& materialEntry = materialSums[materialKey];
-                        materialEntry.sum += unitPrice;
-                        ++materialEntry.samples;
-                        if (materialEntry.displayName.empty()) materialEntry.displayName = shown;
-                    }
-
-                    // Custom items are keyed by their actual OPSUCHT display name.
-                    // Do not mix different custom items that share one vanilla material.
-                    if (!displayName.empty()) {
-                        auto& entry = sums[normalizeItem(displayName)];
-                        entry.sum += unitPrice;
-                        ++entry.samples;
-                        entry.displayName = displayName;
-                        entry.displayKey = true;
-                    } else if (!material.empty()) {
-                        // Vanilla/unnamed auction: material is a safe key.
-                        auto& entry = sums[normalizeItem(material)];
-                        entry.sum += unitPrice;
-                        ++entry.samples;
-                        if (entry.displayName.empty()) entry.displayName = shown;
-                        entry.displayKey = false;
-                    }
-
-                    // Keep the API identifiers as aliases. This is the important
-                    // bridge for Bedrock/Geyser custom item names: the inventory can
-                    // expose an identifier while the API exposes the readable name.
-                    const std::string apiShownName = !displayName.empty() ? displayName : shown;
-                    // Store every useful API-side identifier as an alias. This lets
-                    // the inventory bridge match either the technical item id or the
-                    // readable OPSUCHT name without relying on the UI text.
-                    auto addApiAlias = [&](const std::string& alias) {
-                        if (alias.empty()) return;
-                        auto addAlias = [&](const std::string& aliasKey) {
-                            if (aliasKey.empty()) return;
-                            auto& aliasEntry = aliasSums[aliasKey];
-                            aliasEntry.sum += unitPrice;
-                            ++aliasEntry.samples;
-                            if (aliasEntry.displayName.empty()) aliasEntry.displayName = apiShownName;
-                            aliasEntry.displayKey = !displayName.empty();
-                        };
-                        addAlias(normalizeItem(alias));
-                        addAlias(normalizeItemKeepPrefix(alias));
-                        const std::string technical = normalizeTechnicalItemKey(alias);
-                        if (!technical.empty()) addAlias(technical);
+                    auto addKey = [&](std::unordered_map<std::string, PriceInfo>& target,
+                                      const std::string& value) {
+                        if (value.empty()) return;
+                        const std::string key = normalizeItem(value);
+                        if (!key.empty()) target[key] = info;
+                        const std::string fullKey = normalizeItemKeepPrefix(value);
+                        if (!fullKey.empty()) target[fullKey] = info;
+                        const std::string technicalKey = normalizeTechnicalItemKey(value);
+                        if (!technicalKey.empty()) target[technicalKey] = info;
                     };
 
-                    for (const auto& alias : {itemIdentifier, material, displayName}) {
-                        addApiAlias(alias);
-                    }
+                    addKey(nextPrices, name);
+                    addKey(nextAliases, name);
+                    addKey(nextAliases, opsuchtName);
+                    addKey(nextAliases, minecraftId);
 
-                    // V2 identifier bridge: OPSUCHT may add a technical identifier
-                    // under a field name that is not stable/documented. Index every
-                    // useful string value inside the item object as an alias. The
-                    // display name remains the canonical result; these extra aliases
-                    // are only lookup keys and are never shown as prices themselves.
-                    for (const auto& extra : jsonAllStringValues(itemData)) {
-                        addApiAlias(extra);
-                    }
-                }
-
-                std::unordered_map<std::string, PriceInfo> next;
-                for (auto& [name, info] : sums) {
-                    if (info.samples > 0) next.emplace(name, std::move(info));
-                }
-
-                std::unordered_map<std::string, PriceInfo> nextMaterial;
-                for (auto& [materialKey, info] : materialSums) {
-                    if (info.samples > 0) {
-                        // Keep material prices even when several custom items share
-                        // the same vanilla material. This is a fallback for Bedrock
-                        // items whose custom identifier is not exposed by ItemStack.
-                        if (materialAmbiguous[materialKey]) {
-                            info.displayName.clear();
+                    // Only expose a material fallback when that material maps to
+                    // one unambiguous article. This prevents custom items from
+                    // inheriting the price of a different item with the same base.
+                    if (!minecraftId.empty()) {
+                        const std::string materialKey = normalizeItem(minecraftId);
+                        auto owner = materialOwners.find(materialKey);
+                        const std::string articleKey = normalizeItem(!name.empty() ? name : opsuchtName);
+                        if (owner == materialOwners.end()) {
+                            materialOwners[materialKey] = articleKey;
+                            nextMaterials[materialKey] = info;
+                        } else if (owner->second != articleKey) {
+                            ambiguousMaterials[materialKey] = true;
+                            nextMaterials.erase(materialKey);
                         }
-                        nextMaterial.emplace(materialKey, std::move(info));
                     }
-                }
-
-                std::unordered_map<std::string, PriceInfo> nextAliases;
-                for (auto& [aliasKey, info] : aliasSums) {
-                    if (info.samples > 0 && !aliasKey.empty()) {
-                        nextAliases.emplace(aliasKey, std::move(info));
-                    }
+                    ++loaded;
                 }
 
                 {
-                    std::scoped_lock lock(
-                        mMutex
-                    );
-
-                    mPrices = std::move(next);
-                    mMaterialPrices = std::move(nextMaterial);
+                    std::scoped_lock lock(mMutex);
+                    mPrices = std::move(nextPrices);
                     mAliases = std::move(nextAliases);
+                    mMaterialPrices = std::move(nextMaterials);
+                    mApiAuctionCount.store(loaded);
+                    mApiCategoryCount.store(0);
                     mPriceGeneration.fetch_add(1);
                 }
 
                 if (mSelf) {
-
                     mSelf->getLogger().info(
-                        "OPSUCHT API: {} Preise | {} aktive Auktionen",
-                        priceCount(),
-                        apiAuctionCount()
+                        "OPVANTIS Supabase: {} Artikel mit Preisen geladen ({} Bytes)",
+                        loaded, json.size()
                     );
                 }
+            } else if (mSelf) {
+                mSelf->getLogger().warn(
+                    "OPVANTIS Supabase: Preisabruf fehlgeschlagen; letzter Snapshot bleibt aktiv"
+                );
             }
 
-            // 2) Categories are a secondary catalog source. They are not used
-            // for pricing, but keeping them in the background gives the resolver
-            // another official OPSUCHT vocabulary instead of relying on Geyser text.
-            const auto now = std::chrono::steady_clock::now();
-            if (now - lastCategoryRefresh >= std::chrono::seconds(kApiCategoriesRefreshSeconds)) {
-                const std::string categories = httpGet(kApiCategoriesUrl);
-                if (!categories.empty()) {
-                    std::size_t count = 0;
-                    // Count category-like named entries without assuming one
-                    // particular JSON shape.
-                    for (const auto& obj : jsonObjects(categories)) {
-                        if (obj.find("\"name\"") != std::string::npos ||
-                            obj.find("\"id\"") != std::string::npos ||
-                            obj.find("\"key\"") != std::string::npos) {
-                            ++count;
-                        }
-                    }
-                    mApiCategoryCount.store(count);
-                }
-                lastCategoryRefresh = now;
-            }
-
-            // 3) Keep the last successful API snapshot in memory. A temporary
-            // network failure therefore does not erase prices from the HUD.
-            for (
-                int i = 0;
-                i < kApiRefreshSeconds &&
-                !mStop.load();
-                ++i
-            ) {
+            for (int i = 0; i < kApiRefreshSeconds && !mStop.load(); ++i) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
         }
@@ -2321,10 +2209,12 @@ private:
                     return n.rfind("geyser custom ", 0) == 0 ||
                            n.rfind("geyser_custom_", 0) == 0;
                 };
-                if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
-                    entry.name = stackDisplayName;
-                } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
+                // Canonical display name comes from Supabase public.artikel.
+                // Only fall back to the live stack label when no catalog match exists.
+                if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
+                } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
+                    entry.name = stackDisplayName;
                 } else if (isGeyserCustom) {
                     entry.name = shortDisplayNameFromTechnicalId(rawName);
                 } else {
