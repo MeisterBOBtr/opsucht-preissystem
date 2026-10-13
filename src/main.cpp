@@ -2209,9 +2209,13 @@ private:
                     return n.rfind("geyser custom ", 0) == 0 ||
                            n.rfind("geyser_custom_", 0) == 0;
                 };
-                // Canonical display name comes from Supabase public.artikel.
-                // Only fall back to the live stack label when no catalog match exists.
-                if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
+                // Items are considered registered only when the Supabase catalog
+                // match contains a price. If no article/price match exists, use the
+                // exact requested label instead of implying that the item is known.
+                // Keep the frozen Test31 layout untouched; this changes text only.
+                if (resolved.samples <= 0 || price <= 0.0) {
+                    entry.name = "Item nicht erfasst";
+                } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
                     entry.name = stackDisplayName;
@@ -2220,7 +2224,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = rawName;
+                if (entry.name.empty()) entry.name = "Item nicht erfasst";
 
                 entry.amount =
                     static_cast<int>(
