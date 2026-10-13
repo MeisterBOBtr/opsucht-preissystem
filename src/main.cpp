@@ -824,7 +824,6 @@ public:
             // differ from the German market name. Resolve only these known exact
             // slugs to their catalog labels, then still require an exact Supabase
             // article/price match. No material fallback and no guessed price.
-            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             static const std::unordered_map<std::string, std::string> knownCustomSlugs = {
                 {"main_misc_may26_golden_excalibur", "Excalibur"},
                 {"main_miso_may26_golden_excalibur", "Excalibur"},
