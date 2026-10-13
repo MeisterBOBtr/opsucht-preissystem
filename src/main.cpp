@@ -168,6 +168,14 @@ static std::string normalizeItemKeepPrefix(
     return out;
 }
 
+static bool isGeyserCustomIdentifier(const std::string& raw) {
+    const std::string n = normalizeItemKeepPrefix(raw);
+    // Bedrock/Geyser may emit both `geyser_custom_main_...` and
+    // `geyser_custom2026_...`; normalizeItemKeepPrefix turns underscores
+    // into spaces, so accept the stable `geyser custom` stem in either form.
+    return n.rfind("geyser custom", 0) == 0;
+}
+
 static std::string normalizeItem(
     std::string s
 ) {
@@ -272,9 +280,10 @@ static std::string normalizeTechnicalItemKey(std::string s) {
     while (!compact.empty() && compact.back() == '_') compact.pop_back();
 
     // Remove the presentation prefix in its normalized form.
-    constexpr std::string_view geyserPrefix = "geyser_custom_";
+    constexpr std::string_view geyserPrefix = "geyser_custom";
     if (compact.rfind(geyserPrefix, 0) == 0) {
         compact.erase(0, geyserPrefix.size());
+        while (!compact.empty() && compact.front() == '_') compact.erase(compact.begin());
     }
 
     return compact;
@@ -794,7 +803,7 @@ public:
         // Never fuzzy-match a custom identifier to a vanilla material. A custom
         // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
         const std::string geyserPrefix = "geyser custom ";
-        if (fullKey.rfind(geyserPrefix, 0) == 0) {
+        if (isGeyserCustomIdentifier(rawName)) {
             const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
 
@@ -811,11 +820,29 @@ public:
             if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
             if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
 
-            // OPSUCHT may expose the custom item by its human-readable catalog
-            // name instead of the full Geyser technical identifier. Derive only
-            // the readable suffix (for example
-            // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
-            // and use EXACT matching. Never fall back to the vanilla material.
+            // Some OPSUCHT custom IDs end in a stable technical slug whose words
+            // differ from the German market name. Resolve only these known exact
+            // slugs to their catalog labels, then still require an exact Supabase
+            // article/price match. No material fallback and no guessed price.
+            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
+            static const std::unordered_map<std::string, std::string> knownCustomSlugs = {
+                {"main_misc_may26_golden_excalibur", "Excalibur"},
+                {"main_miso_may26_golden_excalibur", "Excalibur"},
+                {"2026_july26_beach_shovel", "Strandschaufel"},
+                {"2026_sept26_pumpkin_melon_axe", "Kürbis-Melonen-Axt"},
+                {"2026_july26_berserk_axe", "Berserkeraxt"},
+                {"2026_july26_bone_pickaxe", "Knochenspitzhacke"},
+                {"opsuchts_june26_pearl_pickaxe", "Opsucht-Perl-Spitzhacke"},
+                {"main_misc_may26_rust_shovel", "Rust-Schaufel"}
+            };
+            if (auto slug = knownCustomSlugs.find(technicalKey); slug != knownCustomSlugs.end()) {
+                const std::string catalogKey = normalizeItem(slug->second);
+                if (auto it = mPrices.find(catalogKey); it != mPrices.end()) return it->second;
+                if (auto it = mAliases.find(catalogKey); it != mAliases.end()) return it->second;
+            }
+
+            // Otherwise derive only the readable suffix and use exact matching.
+            // Never fall back to the vanilla material.
             const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
             const std::string shortKey = normalizeItem(shortName);
             if (!shortKey.empty()) {
@@ -826,10 +853,59 @@ public:
             return {};
         }
 
-        // No fuzzy matching: only exact article names, explicit aliases, or an
-        // unambiguous vanilla material mapping above may produce a price.
-        // Keep all exact identity paths intact so inventory recognition does not
-        // regress when a technical candidate matches the catalog exactly.
+        // 5) Last-resort fuzzy matching is allowed only for ordinary vanilla
+        // display names. It is never reached for a Geyser custom identifier.
+        // "Item.netherite Pickaxe" when OPSUCHT exposes the same item under a
+        // slightly different display/material spelling. This is deliberately
+        // conservative and only accepts one clear winner.
+        auto makeTokens = [](const std::string& value) {
+            std::vector<std::string> tokens;
+            std::istringstream in(value);
+            std::string token;
+            while (in >> token) {
+                if (token.size() >= 3 && token != "item" && token != "minecraft" && token != "geyser" && token != "custom") {
+                    tokens.push_back(token);
+                }
+            }
+            return tokens;
+        };
+
+        const auto rawTokens = makeTokens(key);
+        const PriceInfo* best = nullptr;
+        double bestScore = 0.0;
+        double secondScore = 0.0;
+
+        auto consider = [&](const std::string& candidateKey, const PriceInfo& info) {
+            if (info.samples <= 0 || candidateKey.empty()) return;
+            const auto candidateTokens = makeTokens(candidateKey);
+            if (rawTokens.empty() || candidateTokens.empty()) return;
+
+            int hits = 0;
+            for (const auto& a : rawTokens) {
+                for (const auto& b : candidateTokens) {
+                    if (a == b || a.find(b) != std::string::npos || b.find(a) != std::string::npos) {
+                        ++hits;
+                        break;
+                    }
+                }
+            }
+            const double score = static_cast<double>(hits) / static_cast<double>(std::max(rawTokens.size(), candidateTokens.size()));
+            if (score > bestScore) {
+                secondScore = bestScore;
+                bestScore = score;
+                best = &info;
+            } else if (score > secondScore) {
+                secondScore = score;
+            }
+        };
+
+        for (const auto& [candidateKey, info] : mPrices) consider(candidateKey, info);
+        for (const auto& [candidateKey, info] : mMaterialPrices) consider(candidateKey, info);
+        for (const auto& [candidateKey, info] : mAliases) consider(candidateKey, info);
+
+        if (best && bestScore >= 0.50 && (bestScore - secondScore >= 0.10 || bestScore >= 0.80)) {
+            return *best;
+        }
 
         return {};
     }
@@ -2129,7 +2205,7 @@ private:
                 // is only a normal netherite pickaxe.
                 clearPriceCacheIfApiChanged();
                 const bool isGeyserCustom = std::any_of(candidates.begin(), candidates.end(), [](const std::string& candidate) {
-                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
+                    return isGeyserCustomIdentifier(candidate);
                 });
 
                 // First resolve readable names exactly against the Supabase
@@ -2146,8 +2222,7 @@ private:
                 auto looksTechnical = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
                     if (n.rfind("minecraft:", 0) == 0 ||
-                        n.rfind("geyser custom ", 0) == 0 ||
-                        n.rfind("geyser_custom_", 0) == 0 ||
+                        isGeyserCustomIdentifier(value) ||
                         n.rfind("item ", 0) == 0) return true;
                     // Names such as NETHERITE_AXE are technical/base labels,
                     // not the visible OPSUCHT market name.
@@ -2181,7 +2256,7 @@ private:
                     // Only try the full technical custom identity; the strict
                     // display-name lookup above handles readable custom names.
                     if (isGeyserCustom &&
-                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
+                        !isGeyserCustomIdentifier(candidate)) {
                         continue;
                     }
                     const PriceInfo match = cachedMatch(candidate);
@@ -2196,7 +2271,7 @@ private:
                 // price such as 70,000 $ for a >100M $ custom item.
                 if (isGeyserCustom && rawName.empty()) {
                     for (const auto& candidate : candidates) {
-                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0) {
+                        if (isGeyserCustomIdentifier(candidate)) {
                             rawName = candidate;
                             break;
                         }
@@ -2225,8 +2300,7 @@ private:
                     rawNormalized.rfind("minecraft:", 0) == 0 ||
                     rawNormalized.rfind("minecraft ", 0) == 0 ||
                     rawNormalized.rfind("item ", 0) == 0;
-                if (rawNormalized.rfind("geyser custom ", 0) == 0 ||
-                    rawNormalized.rfind("geyser_custom_", 0) == 0) {
+                if (isGeyserCustomIdentifier(rawName)) {
                     rawIsTechnicalBase = false;
                 } else {
                     const bool hasUnderscore = rawName.find('_') != std::string::npos;
@@ -2254,8 +2328,7 @@ private:
                 // technical Geyser identifier (or its compact form) as the HUD name.
                 const auto isTechnicalGeyserName = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
-                    return n.rfind("geyser custom ", 0) == 0 ||
-                           n.rfind("geyser_custom_", 0) == 0;
+                    return isGeyserCustomIdentifier(value);
                 };
                 // Items are considered registered only when the Supabase catalog
                 // match contains a price. If no article/price match exists, use the
