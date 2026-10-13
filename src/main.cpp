@@ -2398,47 +2398,10 @@ private:
                 // exact requested label instead of implying that the item is known.
                 // Keep the frozen Test31 layout untouched; this changes text only.
                 if (resolved.samples <= 0 || price <= 0.0) {
-                    // TEST38 DIAGNOSTIC BUILD: show the actual strings exposed by
-                    // the Bedrock ItemStack on the existing item row. This is
-                    // temporary diagnostic text, not a price/identity fallback.
-                    // Keep the frozen panel geometry unchanged.
-                    // Test46: report whether each Bedrock candidate resolves through the safe catalog lookup
-                    // an EXACT catalog match in the currently loaded Supabase data.
-                    // This distinguishes a naming/normalization issue from an item
-                    // that simply has no priced catalog row. No fuzzy/base fallback.
-                    std::ostringstream diag;
-                    diag << "slot=" << slot;
-                    if (!stackDisplayName.empty()) {
-                        std::string display = stackDisplayName;
-                        if (display.size() > 32) display.resize(32);
-                        diag << " disp=" << display;
-                    }
-                    const std::size_t checkCount = std::min<std::size_t>(candidates.size(), 4);
-                    for (std::size_t ci = 0; ci < checkCount; ++ci) {
-                        const auto exact = mApi.findMatch(candidates[ci]);
-                        diag << " c" << ci << ':';
-                        if (exact.samples > 0 && exact.sum > 0.0) {
-                            diag << "MATCH=" << exact.displayName << "$"
-                                 << static_cast<long long>(exact.sum / exact.samples);
-                        } else {
-                            diag << "NO";
-                        }
-                    }
-                    // Keep one readable technical candidate as context after the
-                    // compact match flags; the full candidate strings were already
-                    // confirmed by Test43 and need not crowd out the match results.
-                    if (!candidates.empty()) {
-                        std::string candidate = candidates.front();
-                        if (candidate.size() > 62) candidate.resize(62);
-                        diag << " | " << candidate;
-                    } else if (!rawName.empty()) {
-                        diag << " | raw=" << rawName;
-                    } else {
-                        diag << " | NO_NAME";
-                    }
-                    std::string diagLabel = diag.str();
-                    if (diagLabel.size() > 180) diagLabel.resize(180);
-                    entry.name = "T48 DBG: " + diagLabel;
+                    // Safe final behavior: never guess a name/price from a shared
+                    // Minecraft base ID when the Supabase catalog has no unique
+                    // priced match.
+                    entry.name = "Item nicht erfasst";
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2448,7 +2411,7 @@ private:
                 } else {
                     entry.name = displayItemName(rawName);
                 }
-                if (entry.name.empty()) entry.name = "T48 DBG: NO_NAME";
+                if (entry.name.empty()) entry.name = "Item nicht erfasst";
 
                 entry.amount =
                     static_cast<int>(
@@ -2774,9 +2737,8 @@ private:
         drawRect(commands, x, y, 3.0f, h, border);
         drawRect(commands, x + w - 3.0f, y, 3.0f, h, border);
         drawRect(commands, x, y + h - 3.0f, w, 3.0f, border);
-        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | DIAG TEST48");
-        // Test42 temporarily hides fixed quantity/price columns to expose raw diagnostics.
-        drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM-DIAGNOSE");
+        drawText(commands, x + 12.0f, y + 10.0f, 15.0f, accent, "OPVANTIS | INVENTARWERT");
+        drawText(commands, x + 12.0f, y + 36.0f, 9.0f, accent, "ITEM                 STUECK  PREIS/ST.");
         drawText(commands, x + 12.0f, y + 52.0f, 9.0f, muted, "-----------------------------------------------");
         if (entries.empty()) {
             drawText(commands, x + 12.0f, y + 70.0f, 10.0f, white, "Inventar wird gelesen...");
@@ -2784,14 +2746,14 @@ private:
             const std::size_t shown = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shown; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T48 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T48 DBG:", 0) != 0) name = "T48 DBG: " + name;
-                if (name.size() > 110) name = name.substr(0, 107) + "...";
-                std::ostringstream qty;
-                qty << e.amount;
+                std::string name = e.name.empty() ? "Item nicht erfasst" : e.name;
+                if (e.unitPrice <= 0.0) name = "Item nicht erfasst";
+                if (name.size() > 20) name = name.substr(0, 17) + "...";
                 const float rowY = y + 66.0f + 13.0f * static_cast<float>(i);
                 drawText(commands, x + 12.0f, rowY, 9.0f, white, name);
-                // Quantity and price columns are hidden in this diagnostic build.
+                drawText(commands, x + 198.0f, rowY, 9.0f, white, std::to_string(e.amount));
+                drawText(commands, x + 250.0f, rowY, 9.0f, white,
+                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-");
             }
             if (entries.size() > shown) {
                 drawText(commands, x + 12.0f, y + 70.0f + 17.0f * static_cast<float>(shown),
@@ -2825,8 +2787,8 @@ private:
             nativeAt(18.0f, top, 360.0f, text, color);
         };
 
-        nativeLine(42.0f, "OPVANTIS | DIAG TEST48", nativeAccent);
-        nativeAt(18.0f, 59.0f, 400.0f, "ITEM-DIAGNOSE (EXAKTER SUPABASE-TREFFER)", nativeAccent);
+        nativeLine(42.0f, "OPVANTIS | INVENTARWERT", nativeAccent);
+        nativeAt(18.0f, 59.0f, 400.0f, "ITEM                 STUECK  PREIS/ST.", nativeAccent);
         nativeLine(73.0f, "-----------------------------------------------", nativeMuted);
         if (entries.empty()) {
             nativeLine(88.0f, "Inventar wird gelesen...", nativeWhite);
@@ -2834,11 +2796,14 @@ private:
             const std::size_t shownNative = std::min<std::size_t>(entries.size(), kVisibleRows);
             for (std::size_t i = 0; i < shownNative; ++i) {
                 const auto& e = entries[i];
-                std::string name = e.name.empty() ? "T48 DBG: EMPTY_NAME" : e.name;
-                if (e.unitPrice <= 0.0 && name.rfind("T48 DBG:", 0) != 0) name = "T48 DBG: " + name;
-                if (name.size() > 110) name = name.substr(0, 107) + "...";
+                std::string name = e.name.empty() ? "Item nicht erfasst" : e.name;
+                if (e.unitPrice <= 0.0) name = "Item nicht erfasst";
+                if (name.size() > 23) name = name.substr(0, 20) + "...";
                 const float rowY = 87.0f + 13.0f * static_cast<float>(i);
-                nativeAt(18.0f, rowY, 410.0f, name, nativeWhite);
+                nativeAt(18.0f, rowY, 205.0f, name, nativeWhite);
+                nativeAt(210.0f, rowY, 250.0f, std::to_string(e.amount), nativeWhite);
+                nativeAt(264.0f, rowY, 360.0f,
+                         e.unitPrice > 0.0 ? formatMoney(e.unitPrice) : "-", nativeWhite);
             }
         }
         nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
