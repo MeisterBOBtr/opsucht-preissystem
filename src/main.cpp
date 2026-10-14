@@ -781,29 +781,6 @@ public:
 
         std::scoped_lock lock(mMutex);
 
-        // IMPORTANT: Handle Geyser custom identifiers BEFORE generic aliases and
-        // vanilla-material fallback. Several different OPSUCHT items share the
-        // same Bedrock material (for example DIAMOND_PICKAXE), so a base-material
-        // match must never win for a custom identifier.
-        const std::string geyserPrefix = "geyser custom ";
-        if (fullKey.rfind(geyserPrefix, 0) == 0 || rawName.rfind("geyser_custom_", 0) == 0) {
-            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
-            if (!technicalKey.empty()) {
-                if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
-                if (auto it = mPrices.find(technicalKey); it != mPrices.end()) return it->second;
-            }
-
-            // Only an exact catalog-name match is allowed as a secondary route.
-            // No generic material lookup and no fuzzy match for custom items.
-            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
-            const std::string shortKey = normalizeItem(shortName);
-            if (!shortKey.empty()) {
-                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
-            }
-            return {};
-        }
-
         // 1) Exact match against the normal API name.
         if (auto it = mPrices.find(key); it != mPrices.end()) return it->second;
 
@@ -2274,9 +2251,8 @@ private:
                         }
                     }
                 }
-                // Do not silently pick candidates.front(): candidate order is not
-                // a reliable item identity and can turn a base material into a
-                // false article/price. If nothing matched, keep the slot unpriced.
+                if (rawName.empty() && !candidates.empty()) rawName = candidates.front();
+
                 if (rawName.empty()) {
                     ++mDiagRawFail;
                     InventoryEntry entry;
