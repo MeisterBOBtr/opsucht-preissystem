@@ -168,14 +168,6 @@ static std::string normalizeItemKeepPrefix(
     return out;
 }
 
-static bool isGeyserCustomIdentifier(const std::string& raw) {
-    const std::string n = normalizeItemKeepPrefix(raw);
-    // Bedrock/Geyser may emit both `geyser_custom_main_...` and
-    // `geyser_custom2026_...`; normalizeItemKeepPrefix turns underscores
-    // into spaces, so accept the stable `geyser custom` stem in either form.
-    return n.rfind("geyser custom", 0) == 0;
-}
-
 static std::string normalizeItem(
     std::string s
 ) {
@@ -280,10 +272,9 @@ static std::string normalizeTechnicalItemKey(std::string s) {
     while (!compact.empty() && compact.back() == '_') compact.pop_back();
 
     // Remove the presentation prefix in its normalized form.
-    constexpr std::string_view geyserPrefix = "geyser_custom";
+    constexpr std::string_view geyserPrefix = "geyser_custom_";
     if (compact.rfind(geyserPrefix, 0) == 0) {
         compact.erase(0, geyserPrefix.size());
-        while (!compact.empty() && compact.front() == '_') compact.erase(compact.begin());
     }
 
     return compact;
@@ -803,7 +794,7 @@ public:
         // Never fuzzy-match a custom identifier to a vanilla material. A custom
         // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
         const std::string geyserPrefix = "geyser custom ";
-        if (isGeyserCustomIdentifier(rawName)) {
+        if (fullKey.rfind(geyserPrefix, 0) == 0) {
             const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
 
@@ -820,28 +811,11 @@ public:
             if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
             if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
 
-            // Some OPSUCHT custom IDs end in a stable technical slug whose words
-            // differ from the German market name. Resolve only these known exact
-            // slugs to their catalog labels, then still require an exact Supabase
-            // article/price match. No material fallback and no guessed price.
-            static const std::unordered_map<std::string, std::string> knownCustomSlugs = {
-                {"main_misc_may26_golden_excalibur", "Excalibur"},
-                {"main_miso_may26_golden_excalibur", "Excalibur"},
-                {"2026_july26_beach_shovel", "Strandschaufel"},
-                {"2026_sept26_pumpkin_melon_axe", "Kürbis-Melonen-Axt"},
-                {"2026_july26_berserk_axe", "Berserkeraxt"},
-                {"2026_july26_bone_pickaxe", "Knochenspitzhacke"},
-                {"opsuchts_june26_pearl_pickaxe", "Opsucht-Perl-Spitzhacke"},
-                {"main_misc_may26_rust_shovel", "Rust-Schaufel"}
-            };
-            if (auto slug = knownCustomSlugs.find(technicalKey); slug != knownCustomSlugs.end()) {
-                const std::string catalogKey = normalizeItem(slug->second);
-                if (auto it = mPrices.find(catalogKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(catalogKey); it != mAliases.end()) return it->second;
-            }
-
-            // Otherwise derive only the readable suffix and use exact matching.
-            // Never fall back to the vanilla material.
+            // OPSUCHT may expose the custom item by its human-readable catalog
+            // name instead of the full Geyser technical identifier. Derive only
+            // the readable suffix (for example
+            // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
+            // and use EXACT matching. Never fall back to the vanilla material.
             const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
             const std::string shortKey = normalizeItem(shortName);
             if (!shortKey.empty()) {
@@ -2176,8 +2150,9 @@ private:
                     }
                 }
 
-                // Collect candidate identities internally for strict catalog matching; these details
-                // are not displayed in the final inventory panel.
+                // TEST38 DIAGNOSTIC: preserve the raw client-side identity evidence instead
+                // of guessing a market price. This lets us see which ItemStack fields
+                // are actually different for OPSUCHT custom/enchant variants.
                 if (debugItemPtr) {
                     std::ostringstream dbg;
                     dbg << "slot=" << slot
@@ -2204,14 +2179,14 @@ private:
                 // is only a normal netherite pickaxe.
                 clearPriceCacheIfApiChanged();
                 const bool isGeyserCustom = std::any_of(candidates.begin(), candidates.end(), [](const std::string& candidate) {
-                    return isGeyserCustomIdentifier(candidate);
+                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
                 });
 
-                // First resolve readable names exactly against the Supabase
-                // catalog. Do this before any technical/base identifiers so a
-                // generic NETHERITE_AXE or totem ID cannot win over the real
-                // OPSUCHT custom name.
-                if (!stackDisplayName.empty()) {
+                // Ordinary items may be resolved by their visible name. For a
+                // Geyser custom stack, however, the technical identifier is the
+                // identity source of truth: display-name text can be stale or
+                // belong to another UI element and must never assign its price.
+                if (!isGeyserCustom && !stackDisplayName.empty()) {
                     const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
                     if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
                         rawName = stackDisplayName;
@@ -2221,7 +2196,8 @@ private:
                 auto looksTechnical = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
                     if (n.rfind("minecraft:", 0) == 0 ||
-                        isGeyserCustomIdentifier(value) ||
+                        n.rfind("geyser custom ", 0) == 0 ||
+                        n.rfind("geyser_custom_", 0) == 0 ||
                         n.rfind("item ", 0) == 0) return true;
                     // Names such as NETHERITE_AXE are technical/base labels,
                     // not the visible OPSUCHT market name.
@@ -2255,7 +2231,7 @@ private:
                     // Only try the full technical custom identity; the strict
                     // display-name lookup above handles readable custom names.
                     if (isGeyserCustom &&
-                        !isGeyserCustomIdentifier(candidate)) {
+                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
                         continue;
                     }
                     const PriceInfo match = cachedMatch(candidate);
@@ -2270,7 +2246,7 @@ private:
                 // price such as 70,000 $ for a >100M $ custom item.
                 if (isGeyserCustom && rawName.empty()) {
                     for (const auto& candidate : candidates) {
-                        if (isGeyserCustomIdentifier(candidate)) {
+                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0) {
                             rawName = candidate;
                             break;
                         }
@@ -2299,7 +2275,8 @@ private:
                     rawNormalized.rfind("minecraft:", 0) == 0 ||
                     rawNormalized.rfind("minecraft ", 0) == 0 ||
                     rawNormalized.rfind("item ", 0) == 0;
-                if (isGeyserCustomIdentifier(rawName)) {
+                if (rawNormalized.rfind("geyser custom ", 0) == 0 ||
+                    rawNormalized.rfind("geyser_custom_", 0) == 0) {
                     rawIsTechnicalBase = false;
                 } else {
                     const bool hasUnderscore = rawName.find('_') != std::string::npos;
@@ -2327,16 +2304,23 @@ private:
                 // technical Geyser identifier (or its compact form) as the HUD name.
                 const auto isTechnicalGeyserName = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
-                    return isGeyserCustomIdentifier(value);
+                    return n.rfind("geyser custom ", 0) == 0 ||
+                           n.rfind("geyser_custom_", 0) == 0;
                 };
                 // Items are considered registered only when the Supabase catalog
                 // match contains a price. If no article/price match exists, use the
                 // exact requested label instead of implying that the item is known.
                 // Keep the frozen Test31 layout untouched; this changes text only.
                 if (resolved.samples <= 0 || price <= 0.0) {
-                    // Final user-facing behavior: never expose internal diagnostic
-                    // strings and never guess a price when catalog identity is unclear.
-                    entry.name = "Item nicht erfasst";
+                    // Do not display diagnostic candidate strings as if they were
+                    // real inventory items. Unknown stacks remain clearly unpriced.
+                    if (isGeyserCustom) {
+                        const std::string readable = shortDisplayNameFromTechnicalId(rawName);
+                        entry.name = readable.empty() ? "Item nicht erfasst" : readable;
+                    } else {
+                        entry.name = (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName))
+                            ? stackDisplayName : "Item nicht erfasst";
+                    }
                 } else if (!apiName.empty() && !isTechnicalGeyserName(apiName)) {
                     entry.name = apiName;
                 } else if (!stackDisplayName.empty() && !isTechnicalGeyserName(stackDisplayName)) {
@@ -2583,7 +2567,37 @@ private:
         if (mDiagLog.size() > 6) mDiagLog.erase(mDiagLog.begin());
     }
 
-    void drawDiagnosticOverlay() {}
+    void drawDiagnosticOverlay() {
+        // Independent diagnostic surface: intentionally visible while inventory is closed.
+        std::vector<pl::modmenu::DrawCommand> commands;
+        commands.reserve(32);
+        constexpr float x = 430.0f, y = 38.0f, w = 330.0f, h = 244.0f;
+        constexpr std::uint32_t bg = 0xEE10131B, white = 0xFFF2F2F2;
+        constexpr std::uint32_t accent = 0xFFD5A8FF, muted = 0xFFB8C0CC;
+        drawRect(commands, x, y, w, h, bg);
+        drawRect(commands, x, y, w, 3.0f, 0xFF7435B0);
+        drawRect(commands, x, y, 3.0f, h, 0xFF7435B0);
+        drawRect(commands, x + w - 3.0f, y, 3.0f, h, 0xFF7435B0);
+        drawRect(commands, x, y + h - 3.0f, w, 3.0f, 0xFF7435B0);
+        drawText(commands, x + 12, y + 10, 15, accent, "OPVANTIS RENDER TEST 21");
+        auto line = [&](int row, const std::string& label, const std::string& value) {
+            drawText(commands, x + 12, y + 35.0f + row * 20.0f, 10, muted, label);
+            drawText(commands, x + 164, y + 35.0f + row * 20.0f, 10, white, value);
+        };
+        line(0, "Inventar-Status:", mInventoryOpen.load() ? "OFFEN" : "GESCHLOSSEN");
+        line(1, "Screen-Events:", std::to_string(mScreenEvents.load()));
+        line(2, "letzter Screen-Typ:", std::to_string(mLastScreenKind.load()));
+        line(3, "letzte Phase:", std::to_string(mLastScreenPhase.load()));
+        line(4, "Container-Events:", std::to_string(mContainerScreenEvents.load()));
+        line(5, "andere Screen-Events:", std::to_string(mNonContainerScreenEvents.load()));
+        line(6, "Container-Open-Hook:", std::to_string(mContainerOpenCalls.load()));
+        line(7, "Container-Close-Hook:", std::to_string(mContainerCloseCalls.load()));
+        line(8, "Text-Aufrufe:", std::to_string(mDrawTextCalls.load()));
+        line(9, "Inventar-Text-Treffer:", std::to_string(mInventoryLabelHits.load()));
+        line(10, "Slots erkannt:", std::to_string(mDiagSlots.load()));
+        line(11, "Preis-Treffer:", std::to_string(mDiagPriceMatches.load()));
+        pl::modmenu::submitDrawCommands(std::string(kModuleId) + ".diagnostic", commands);
+    }
 
     void drawDirectInventoryOverlayWithArgs(void* uiContext, void* font, void* textMeasure, void* caretMeasure) {
         // TEST 24: intentionally use Minecraft's original drawText function,
