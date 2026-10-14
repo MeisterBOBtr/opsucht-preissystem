@@ -280,29 +280,6 @@ static std::string normalizeTechnicalItemKey(std::string s) {
     return compact;
 }
 
-static std::string knownCatalogNameFromTechnicalId(const std::string& raw) {
-    const std::string key = normalizeTechnicalItemKey(raw);
-    // Explicit OPSUCHT catalog mappings based on the technical IDs already
-    // observed in the user's Bedrock inventory diagnostics. These mappings
-    // are used only for exact catalog lookup; they never invent a price.
-    const std::pair<std::string_view, std::string_view> mappings[] = {
-        {"golden_excalibur", "Excalibur"},
-        {"beach_shovel", "Strandsschaufel"},
-        {"pumpkin_melon_axe", "Kürbis-Melonen-Axt"},
-        {"berserk_axe", "Berserkeraxt"},
-        {"bone_pickaxe", "Knochenspitzhacke"},
-        {"pearl_pickaxe", "Opsucht-Perl-Spitzhacke"},
-        {"rust_shovel", "Rust-Schaufel"}
-    };
-    for (const auto& [suffix, catalogName] : mappings) {
-        if (key.size() >= suffix.size() &&
-            key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0) {
-            return std::string(catalogName);
-        }
-    }
-    return {};
-}
-
 static std::string shortDisplayNameFromTechnicalId(const std::string& raw) {
     std::string key = normalizeTechnicalItemKey(raw);
     if (key.empty()) return {};
@@ -804,6 +781,29 @@ public:
 
         std::scoped_lock lock(mMutex);
 
+        // IMPORTANT: Handle Geyser custom identifiers BEFORE generic aliases and
+        // vanilla-material fallback. Several different OPSUCHT items share the
+        // same Bedrock material (for example DIAMOND_PICKAXE), so a base-material
+        // match must never win for a custom identifier.
+        const std::string geyserPrefix = "geyser custom ";
+        if (fullKey.rfind(geyserPrefix, 0) == 0 || rawName.rfind("geyser_custom_", 0) == 0) {
+            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
+            if (!technicalKey.empty()) {
+                if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
+                if (auto it = mPrices.find(technicalKey); it != mPrices.end()) return it->second;
+            }
+
+            // Only an exact catalog-name match is allowed as a secondary route.
+            // No generic material lookup and no fuzzy match for custom items.
+            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
+            const std::string shortKey = normalizeItem(shortName);
+            if (!shortKey.empty()) {
+                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
+                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
+            }
+            return {};
+        }
+
         // 1) Exact match against the normal API name.
         if (auto it = mPrices.find(key); it != mPrices.end()) return it->second;
 
@@ -839,15 +839,6 @@ public:
             // the readable suffix (for example
             // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
             // and use EXACT matching. Never fall back to the vanilla material.
-            // Prefer a known, explicit OPSUCHT ID -> catalog-name mapping.
-            // The catalog names are then looked up exactly in Supabase data.
-            const std::string mappedName = knownCatalogNameFromTechnicalId(rawName);
-            if (!mappedName.empty()) {
-                const std::string mappedKey = normalizeItem(mappedName);
-                if (auto it = mPrices.find(mappedKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(mappedKey); it != mAliases.end()) return it->second;
-            }
-
             const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
             const std::string shortKey = normalizeItem(shortName);
             if (!shortKey.empty()) {
@@ -2217,10 +2208,7 @@ private:
                 // catalog. Do this before any technical/base identifiers so a
                 // generic NETHERITE_AXE or totem ID cannot win over the real
                 // OPSUCHT custom name.
-                // A readable stack label can be stale or belong to a different
-                // native object on Bedrock. For Geyser custom stacks, never let
-                // that label override the technical custom identity.
-                if (!isGeyserCustom && !stackDisplayName.empty()) {
+                if (!stackDisplayName.empty()) {
                     const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
                     if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
                         rawName = stackDisplayName;
@@ -2246,19 +2234,6 @@ private:
                     }
                     return hasUnderscore && hasLetter && allLettersUpper;
                 };
-
-                if (rawName.empty() && isGeyserCustom) {
-                    for (const auto& candidate : candidates) {
-                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) continue;
-                        const std::string mappedName = knownCatalogNameFromTechnicalId(candidate);
-                        if (mappedName.empty()) continue;
-                        const PriceInfo mappedMatch = mApi.findExactMatch(mappedName);
-                        if (mappedMatch.samples > 0 && mappedMatch.sum > 0.0) {
-                            rawName = mappedName;
-                            break;
-                        }
-                    }
-                }
 
                 if (rawName.empty()) {
                     for (const auto& candidate : candidates) {
@@ -2299,8 +2274,9 @@ private:
                         }
                     }
                 }
-                if (rawName.empty() && !candidates.empty()) rawName = candidates.front();
-
+                // Do not silently pick candidates.front(): candidate order is not
+                // a reliable item identity and can turn a base material into a
+                // false article/price. If nothing matched, keep the slot unpriced.
                 if (rawName.empty()) {
                     ++mDiagRawFail;
                     InventoryEntry entry;
