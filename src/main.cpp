@@ -781,6 +781,57 @@ public:
 
         std::scoped_lock lock(mMutex);
 
+        // IMPORTANT: Handle Geyser custom identifiers BEFORE generic aliases and
+        // vanilla-material fallback. Several different OPSUCHT items share the
+        // same Bedrock material (for example DIAMOND_PICKAXE), so a base-material
+        // match must never win for a custom identifier.
+        const std::string geyserPrefix = "geyser custom ";
+        if (fullKey.rfind(geyserPrefix, 0) == 0 || rawName.rfind("geyser_custom_", 0) == 0) {
+            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
+            if (!technicalKey.empty()) {
+                if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
+                if (auto it = mPrices.find(technicalKey); it != mPrices.end()) return it->second;
+            }
+
+            // Only an exact catalog-name match is allowed as a secondary route.
+            // No generic material lookup and no fuzzy match for custom items.
+            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
+            const std::string shortKey = normalizeItem(shortName);
+            if (!shortKey.empty()) {
+                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
+                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
+            }
+
+            // Dynamic catalog matching for custom Geyser IDs. OPSUCHT may expose
+            // a readable market name while Bedrock exposes only a technical ID
+            // (e.g. ..._golden_excalibur). Compare the identifier's words against
+            // every priced Supabase catalog name. Accept only a unique, strong
+            // name hit; never use the shared vanilla material as a fallback.
+            const std::string technicalKey = normalizeItem(rawName);
+            PriceInfo customBest{};
+            std::string customBestName;
+            bool customAmbiguous = false;
+            for (const auto& [catalogKey, info] : mPrices) {
+                if (info.samples <= 0 || info.displayName.empty()) continue;
+                const std::string displayKey = normalizeItem(info.displayName);
+                if (displayKey.empty() || displayKey.size() < 4) continue;
+                // Require the full catalog name to appear as a contiguous phrase
+                // in the technical ID. This works across arbitrary catalog sizes
+                // without a manually maintained seven-item mapping.
+                if (technicalKey.find(displayKey) != std::string::npos) {
+                    if (customBestName.empty()) {
+                        customBest = info;
+                        customBestName = displayKey;
+                    } else if (customBestName != displayKey) {
+                        customAmbiguous = true;
+                        break;
+                    }
+                }
+            }
+            if (!customAmbiguous && !customBestName.empty()) return customBest;
+            return {};
+        }
+
         // 1) Exact match against the normal API name.
         if (auto it = mPrices.find(key); it != mPrices.end()) return it->second;
 
@@ -1202,7 +1253,8 @@ private:
                     const std::string name = jsonString(object, {"name"});
                     const std::string opsuchtName = jsonString(object, {"opsucht_name"});
                     const std::string minecraftId = jsonString(object, {"minecraft_id"});
-                    if (name.empty() && opsuchtName.empty() && minecraftId.empty()) continue;
+                    const std::string recognitionKey = jsonString(object, {"erkennungsschluessel"});
+                    if (name.empty() && opsuchtName.empty() && minecraftId.empty() && recognitionKey.empty()) continue;
 
                     const double avgPrice = jsonNumber(object, {"avg_price"});
                     const int samples = static_cast<int>(jsonNumber(object, {"samples"}));
@@ -1231,6 +1283,9 @@ private:
                     addKey(nextPrices, name);
                     addKey(nextAliases, name);
                     addKey(nextAliases, opsuchtName);
+                    // Keep the Supabase recognition key available as a dynamic
+                    // catalog alias too. It is not treated as a material ID.
+                    addKey(nextAliases, recognitionKey);
                     // Do NOT add minecraft_id as an article alias. Multiple OPSUCHT
                     // custom items (e.g. talismans, tool/armor tiers) can share one
                     // Bedrock base ID; storing that ID here made the last article
@@ -2251,8 +2306,9 @@ private:
                         }
                     }
                 }
-                if (rawName.empty() && !candidates.empty()) rawName = candidates.front();
-
+                // Do not silently pick candidates.front(): candidate order is not
+                // a reliable item identity and can turn a base material into a
+                // false article/price. If nothing matched, keep the slot unpriced.
                 if (rawName.empty()) {
                     ++mDiagRawFail;
                     InventoryEntry entry;
