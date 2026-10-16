@@ -807,7 +807,7 @@ public:
             // (e.g. ..._golden_excalibur). Compare the identifier's words against
             // every priced Supabase catalog name. Accept only a unique, strong
             // name hit; never use the shared vanilla material as a fallback.
-            const std::string technicalKey = normalizeItem(rawName);
+            const std::string dynamicTechnicalKey = normalizeItem(rawName);
             PriceInfo customBest{};
             std::string customBestName;
             bool customAmbiguous = false;
@@ -818,7 +818,7 @@ public:
                 // Require the full catalog name to appear as a contiguous phrase
                 // in the technical ID. This works across arbitrary catalog sizes
                 // without a manually maintained seven-item mapping.
-                if (technicalKey.find(displayKey) != std::string::npos) {
+                if (dynamicTechnicalKey.find(displayKey) != std::string::npos) {
                     if (customBestName.empty()) {
                         customBest = info;
                         customBestName = displayKey;
@@ -829,51 +829,6 @@ public:
                 }
             }
             if (!customAmbiguous && !customBestName.empty()) return customBest;
-
-            // Generic token-based fallback for catalog entries whose OPSUCHT
-            // name uses a different word order or includes a suffix/prefix.
-            // This is catalog-driven (not a hard-coded item list) and accepts
-            // only a single strong winner. Shared material IDs are never used.
-            auto tokens = [](const std::string& value) {
-                std::vector<std::string> result;
-                std::string normalized = normalizeItem(value);
-                std::istringstream input(normalized);
-                std::string token;
-                while (input >> token) {
-                    if (token.size() >= 4 && token != "geyser" && token != "custom" &&
-                        token != "minecraft" && token != "item" && token != "main" &&
-                        token != "misc" && token != "june26" && token != "july26" &&
-                        token != "august26" && token != "sept26" && token != "may26") {
-                        result.push_back(token);
-                    }
-                }
-                return result;
-            };
-            const auto idTokens = tokens(rawName);
-            const PriceInfo* bestInfo = nullptr;
-            std::string bestLabel;
-            double bestScore = 0.0;
-            double secondScore = 0.0;
-            for (const auto& [catalogKey, info] : mPrices) {
-                if (info.samples <= 0 || info.displayName.empty()) continue;
-                const auto nameTokens = tokens(info.displayName);
-                if (idTokens.empty() || nameTokens.empty()) continue;
-                int hits = 0;
-                for (const auto& a : nameTokens) {
-                    if (std::find(idTokens.begin(), idTokens.end(), a) != idTokens.end()) ++hits;
-                }
-                const double score = static_cast<double>(hits) /
-                    static_cast<double>(std::max(idTokens.size(), nameTokens.size()));
-                if (score > bestScore) {
-                    secondScore = bestScore;
-                    bestScore = score;
-                    bestInfo = &info;
-                    bestLabel = info.displayName;
-                } else if (score > secondScore) {
-                    secondScore = score;
-                }
-            }
-            if (bestInfo && bestScore >= 0.75 && bestScore > secondScore) return *bestInfo;
             return {};
         }
 
@@ -886,41 +841,7 @@ public:
         // 3) Vanilla material fallback.
         if (auto it = mMaterialPrices.find(key); it != mMaterialPrices.end()) return it->second;
 
-        // 4) Geyser custom items: use the full technical identifier only.
-        // Never fuzzy-match a custom identifier to a vanilla material. A custom
-        // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
-        const std::string geyserPrefix = "geyser custom ";
-        if (fullKey.rfind(geyserPrefix, 0) == 0) {
-            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
-            if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
-
-            // Also try the API-side form with/without the Geyser presentation
-            // prefix.  The raw client id can be `geyser_custom_main_...`, while
-            // OPSUCHT commonly identifies the same custom item as just
-            // `main_...`.
-            const std::string fullTechnicalKey = normalizeItemKeepPrefix(rawName);
-            const std::string prefixlessTechnicalKey =
-                fullTechnicalKey.rfind(geyserPrefix, 0) == 0
-                    ? fullTechnicalKey.substr(geyserPrefix.size())
-                    : fullTechnicalKey;
-            if (auto it = mAliases.find(normalizeItem(prefixlessTechnicalKey)); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
-
-            // OPSUCHT may expose the custom item by its human-readable catalog
-            // name instead of the full Geyser technical identifier. Derive only
-            // the readable suffix (for example
-            // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
-            // and use EXACT matching. Never fall back to the vanilla material.
-            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
-            const std::string shortKey = normalizeItem(shortName);
-            if (!shortKey.empty()) {
-                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
-            }
-
-            return {};
-        }
+        // Geyser custom identifiers were handled above; never use a vanilla-material fallback for them.
 
         // 5) Last-resort fuzzy matching is allowed only for ordinary vanilla
         // display names. It is never reached for a Geyser custom identifier.
