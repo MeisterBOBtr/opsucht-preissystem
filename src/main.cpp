@@ -829,6 +829,51 @@ public:
                 }
             }
             if (!customAmbiguous && !customBestName.empty()) return customBest;
+
+            // Generic token-based fallback for catalog entries whose OPSUCHT
+            // name uses a different word order or includes a suffix/prefix.
+            // This is catalog-driven (not a hard-coded item list) and accepts
+            // only a single strong winner. Shared material IDs are never used.
+            auto tokens = [](const std::string& value) {
+                std::vector<std::string> result;
+                std::string normalized = normalizeItem(value);
+                std::istringstream input(normalized);
+                std::string token;
+                while (input >> token) {
+                    if (token.size() >= 4 && token != "geyser" && token != "custom" &&
+                        token != "minecraft" && token != "item" && token != "main" &&
+                        token != "misc" && token != "june26" && token != "july26" &&
+                        token != "august26" && token != "sept26" && token != "may26") {
+                        result.push_back(token);
+                    }
+                }
+                return result;
+            };
+            const auto idTokens = tokens(rawName);
+            const PriceInfo* bestInfo = nullptr;
+            std::string bestLabel;
+            double bestScore = 0.0;
+            double secondScore = 0.0;
+            for (const auto& [catalogKey, info] : mPrices) {
+                if (info.samples <= 0 || info.displayName.empty()) continue;
+                const auto nameTokens = tokens(info.displayName);
+                if (idTokens.empty() || nameTokens.empty()) continue;
+                int hits = 0;
+                for (const auto& a : nameTokens) {
+                    if (std::find(idTokens.begin(), idTokens.end(), a) != idTokens.end()) ++hits;
+                }
+                const double score = static_cast<double>(hits) /
+                    static_cast<double>(std::max(idTokens.size(), nameTokens.size()));
+                if (score > bestScore) {
+                    secondScore = bestScore;
+                    bestScore = score;
+                    bestInfo = &info;
+                    bestLabel = info.displayName;
+                } else if (score > secondScore) {
+                    secondScore = score;
+                }
+            }
+            if (bestInfo && bestScore >= 0.75 && bestScore > secondScore) return *bestInfo;
             return {};
         }
 
