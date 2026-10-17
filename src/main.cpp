@@ -807,7 +807,7 @@ public:
             // (e.g. ..._golden_excalibur). Compare the identifier's words against
             // every priced Supabase catalog name. Accept only a unique, strong
             // name hit; never use the shared vanilla material as a fallback.
-            const std::string technicalKey = normalizeItem(rawName);
+            const std::string customTechnicalKey = normalizeItem(rawName);
             PriceInfo customBest{};
             std::string customBestName;
             bool customAmbiguous = false;
@@ -818,7 +818,7 @@ public:
                 // Require the full catalog name to appear as a contiguous phrase
                 // in the technical ID. This works across arbitrary catalog sizes
                 // without a manually maintained seven-item mapping.
-                if (technicalKey.find(displayKey) != std::string::npos) {
+                if (customTechnicalKey.find(displayKey) != std::string::npos) {
                     if (customBestName.empty()) {
                         customBest = info;
                         customBestName = displayKey;
@@ -840,42 +840,6 @@ public:
 
         // 3) Vanilla material fallback.
         if (auto it = mMaterialPrices.find(key); it != mMaterialPrices.end()) return it->second;
-
-        // 4) Geyser custom items: use the full technical identifier only.
-        // Never fuzzy-match a custom identifier to a vanilla material. A custom
-        // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
-        const std::string geyserPrefix = "geyser custom ";
-        if (fullKey.rfind(geyserPrefix, 0) == 0) {
-            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
-            if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
-
-            // Also try the API-side form with/without the Geyser presentation
-            // prefix.  The raw client id can be `geyser_custom_main_...`, while
-            // OPSUCHT commonly identifies the same custom item as just
-            // `main_...`.
-            const std::string fullTechnicalKey = normalizeItemKeepPrefix(rawName);
-            const std::string prefixlessTechnicalKey =
-                fullTechnicalKey.rfind(geyserPrefix, 0) == 0
-                    ? fullTechnicalKey.substr(geyserPrefix.size())
-                    : fullTechnicalKey;
-            if (auto it = mAliases.find(normalizeItem(prefixlessTechnicalKey)); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
-
-            // OPSUCHT may expose the custom item by its human-readable catalog
-            // name instead of the full Geyser technical identifier. Derive only
-            // the readable suffix (for example
-            // geyser_custom_main_misc_may26_golden_excalibur -> Golden Excalibur)
-            // and use EXACT matching. Never fall back to the vanilla material.
-            const std::string shortName = shortDisplayNameFromTechnicalId(rawName);
-            const std::string shortKey = normalizeItem(shortName);
-            if (!shortKey.empty()) {
-                if (auto it = mPrices.find(shortKey); it != mPrices.end()) return it->second;
-                if (auto it = mAliases.find(shortKey); it != mAliases.end()) return it->second;
-            }
-
-            return {};
-        }
 
         // 5) Last-resort fuzzy matching is allowed only for ordinary vanilla
         // display names. It is never reached for a Geyser custom identifier.
@@ -1254,13 +1218,7 @@ private:
                     const std::string opsuchtName = jsonString(object, {"opsucht_name"});
                     const std::string minecraftId = jsonString(object, {"minecraft_id"});
                     const std::string recognitionKey = jsonString(object, {"erkennungsschluessel"});
-                    // Read the raw Opsucht item snapshot stored in artikel.roh_daten.
-                    // This provides catalog aliases even when the outer article name
-                    // differs from the original stream displayName.
-                    const std::string rohDaten = jsonObjectField(object, "roh_daten");
-                    const std::string rawDisplayName = jsonString(rohDaten, {"displayName", "display_name"});
-                    const std::string rawMaterial = jsonString(rohDaten, {"material"});
-                    if (name.empty() && opsuchtName.empty() && minecraftId.empty() && recognitionKey.empty() && rawDisplayName.empty()) continue;
+                    if (name.empty() && opsuchtName.empty() && minecraftId.empty() && recognitionKey.empty()) continue;
 
                     const double avgPrice = jsonNumber(object, {"avg_price"});
                     const int samples = static_cast<int>(jsonNumber(object, {"samples"}));
@@ -1289,10 +1247,6 @@ private:
                     addKey(nextPrices, name);
                     addKey(nextAliases, name);
                     addKey(nextAliases, opsuchtName);
-                    addKey(nextAliases, rawDisplayName);
-                    // roh_daten.material is only a fallback candidate; the existing
-                    // ambiguity check below prevents shared materials from assigning
-                    // the wrong custom-item price.
                     // Keep the Supabase recognition key available as a dynamic
                     // catalog alias too. It is not treated as a material ID.
                     addKey(nextAliases, recognitionKey);
