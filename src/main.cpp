@@ -2751,6 +2751,26 @@ private:
         }
         nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
         nativeLine(341.0f, "BEWERTETE ITEMS: " + std::to_string(pricedItems), nativeMuted);
+
+        // TEMPORARY INVENTORY-ID DIAGNOSTIC for the user's test build.
+        // This is intentionally visible only while the inventory panel is drawn.
+        // It does not affect item matching, Supabase requests, or price totals.
+        std::ostringstream diagSummary;
+        diagSummary << "DIAG P:" << mDiagPlayer.load()
+                    << " I:" << mDiagInventory.load()
+                    << " C:" << mDiagContainer.load()
+                    << " V:" << mDiagVector.load()
+                    << " S:" << mDiagSlots.load()
+                    << " RAW:" << mDiagRawOk.load() << "/" << mDiagRawFail.load()
+                    << " PREIS:" << mDiagPriceMatches.load();
+        nativeAt(18.0f, 356.0f, 420.0f, diagSummary.str(), nativeMuted);
+        std::string lastItemDiag;
+        for (const auto& e : entries) {
+            if (!e.debugDetails.empty()) { lastItemDiag = e.debugDetails; break; }
+        }
+        if (lastItemDiag.empty()) lastItemDiag = "ITEM-ID: keine Kandidaten erfasst";
+        if (lastItemDiag.size() > 58) lastItemDiag = lastItemDiag.substr(0, 55) + "...";
+        nativeAt(18.0f, 371.0f, 420.0f, lastItemDiag, nativeMuted);
     }
 
     void drawInventoryOverlay(
