@@ -785,12 +785,12 @@ public:
         // vanilla-material fallback. Several different OPSUCHT items share the
         // same Bedrock material (for example DIAMOND_PICKAXE), so a base-material
         // match must never win for a custom identifier.
-        const std::string geyserPrefix = "geyser custom ";
-        if (fullKey.rfind(geyserPrefix, 0) == 0 || rawName.rfind("geyser_custom_", 0) == 0) {
-            const std::string technicalKey = normalizeTechnicalItemKey(rawName);
-            if (!technicalKey.empty()) {
-                if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
-                if (auto it = mPrices.find(technicalKey); it != mPrices.end()) return it->second;
+        const std::string geyserPrefixCustom = "geyser custom ";
+        if (fullKey.rfind(geyserPrefixCustom, 0) == 0 || rawName.rfind("geyser_custom_", 0) == 0) {
+            const std::string technicalKeyCustom = normalizeTechnicalItemKey(rawName);
+            if (!technicalKeyCustom.empty()) {
+                if (auto it = mAliases.find(technicalKeyCustom); it != mAliases.end()) return it->second;
+                if (auto it = mPrices.find(technicalKeyCustom); it != mPrices.end()) return it->second;
             }
 
             // Only an exact catalog-name match is allowed as a secondary route.
@@ -807,7 +807,7 @@ public:
             // (e.g. ..._golden_excalibur). Compare the identifier's words against
             // every priced Supabase catalog name. Accept only a unique, strong
             // name hit; never use the shared vanilla material as a fallback.
-            const std::string normalizedTechnicalKey = normalizeItem(rawName);
+            const std::string technicalKeyCustom = normalizeItem(rawName);
             PriceInfo customBest{};
             std::string customBestName;
             bool customAmbiguous = false;
@@ -818,7 +818,7 @@ public:
                 // Require the full catalog name to appear as a contiguous phrase
                 // in the technical ID. This works across arbitrary catalog sizes
                 // without a manually maintained seven-item mapping.
-                if (normalizedTechnicalKey.find(displayKey) != std::string::npos) {
+                if (technicalKeyCustom.find(displayKey) != std::string::npos) {
                     if (customBestName.empty()) {
                         customBest = info;
                         customBestName = displayKey;
@@ -844,7 +844,7 @@ public:
         // 4) Geyser custom items: use the full technical identifier only.
         // Never fuzzy-match a custom identifier to a vanilla material. A custom
         // Netherite Pickaxe must never inherit the normal Netherite Pickaxe price.
-        const std::string geyserPrefixFallback = "geyser custom ";
+        const std::string geyserPrefix = "geyser custom ";
         if (fullKey.rfind(geyserPrefix, 0) == 0) {
             const std::string technicalKey = normalizeTechnicalItemKey(rawName);
             if (auto it = mAliases.find(technicalKey); it != mAliases.end()) return it->second;
@@ -855,12 +855,12 @@ public:
             // `main_...`.
             const std::string fullTechnicalKey = normalizeItemKeepPrefix(rawName);
             const std::string prefixlessTechnicalKey =
-                fullTechnicalKey.rfind(geyserPrefixFallback, 0) == 0
-                    ? fullTechnicalKey.substr(geyserPrefixFallback.size())
+                fullTechnicalKey.rfind(geyserPrefix, 0) == 0
+                    ? fullTechnicalKey.substr(geyserPrefix.size())
                     : fullTechnicalKey;
             if (auto it = mAliases.find(normalizeItem(prefixlessTechnicalKey)); it != mAliases.end()) return it->second;
             if (auto it = mAliases.find(fullKey); it != mAliases.end()) return it->second;
-            if (auto it = mAliases.find(fullKey.substr(geyserPrefixFallback.size())); it != mAliases.end()) return it->second;
+            if (auto it = mAliases.find(fullKey.substr(geyserPrefix.size())); it != mAliases.end()) return it->second;
 
             // OPSUCHT may expose the custom item by its human-readable catalog
             // name instead of the full Geyser technical identifier. Derive only
@@ -2225,6 +2225,13 @@ private:
                         dbg << std::hex << std::setw(2) << std::setfill('0') << b;
                     }
                     debugDetails = dbg.str();
+                    // Diagnostic pass: log actual per-slot identifiers occasionally so
+                    // we can compare ordinary and OPSUCHT custom items without changing
+                    // the visible Test31 panel or the Supabase sync.
+                    if ((mUiRefreshCounter % 60) == 0) {
+                        std::string line = "ITEM-ID " + debugDetails;
+                        addDiagLog(line);
+                    }
                 }
 
                 // Resolve cheap/exact candidates first. For Geyser custom items we
