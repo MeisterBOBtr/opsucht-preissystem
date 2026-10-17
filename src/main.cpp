@@ -1253,7 +1253,12 @@ private:
                     const std::string opsuchtName = jsonString(object, {"opsucht_name"});
                     const std::string minecraftId = jsonString(object, {"minecraft_id"});
                     const std::string recognitionKey = jsonString(object, {"erkennungsschluessel"});
-                    if (name.empty() && opsuchtName.empty() && minecraftId.empty() && recognitionKey.empty()) continue;
+                    // roh_daten is the authoritative item fingerprint supplied by
+                    // Supabase. Prefer its original OPSUCHT displayName and index it
+                    // as an additional dynamic alias; no hard-coded item list.
+                    const std::string rawData = jsonObjectField(object, "roh_daten");
+                    const std::string rawDataName = jsonString(rawData, {"displayName", "display_name"});
+                    if (name.empty() && opsuchtName.empty() && minecraftId.empty() && recognitionKey.empty() && rawDataName.empty()) continue;
 
                     const double avgPrice = jsonNumber(object, {"avg_price"});
                     const int samples = static_cast<int>(jsonNumber(object, {"samples"}));
@@ -1265,7 +1270,9 @@ private:
                     // Prefer the explicit OPSUCHT catalog identity for display.
                     // `name` can be a technical/base label, while `opsucht_name`
                     // is the market-facing name used to distinguish custom items.
-                    info.displayName = !opsuchtName.empty() ? opsuchtName : name;
+                    info.displayName = !rawDataName.empty()
+                        ? rawDataName
+                        : (!opsuchtName.empty() ? opsuchtName : name);
                     info.displayKey = true;
 
                     auto addKey = [&](std::unordered_map<std::string, PriceInfo>& target,
@@ -1282,6 +1289,11 @@ private:
                     addKey(nextPrices, name);
                     addKey(nextAliases, name);
                     addKey(nextAliases, opsuchtName);
+                    // Match against roh_daten.displayName as well as the flattened
+                    // article columns. This lets a Bedrock/Geyser item resolve to
+                    // the stored OPSUCHT item record and then use that article's
+                    // averaged price. Keep material IDs out of this alias map.
+                    addKey(nextAliases, rawDataName);
                     // Keep the Supabase recognition key available as a dynamic
                     // catalog alias too. It is not treated as a material ID.
                     addKey(nextAliases, recognitionKey);
@@ -2751,26 +2763,6 @@ private:
         }
         nativeLine(326.0f, "GESAMTWERT: " + formatMoney(total), nativeAccent);
         nativeLine(341.0f, "BEWERTETE ITEMS: " + std::to_string(pricedItems), nativeMuted);
-
-        // TEMPORARY INVENTORY-ID DIAGNOSTIC for the user's test build.
-        // This is intentionally visible only while the inventory panel is drawn.
-        // It does not affect item matching, Supabase requests, or price totals.
-        std::ostringstream diagSummary;
-        diagSummary << "DIAG P:" << mDiagPlayer.load()
-                    << " I:" << mDiagInventory.load()
-                    << " C:" << mDiagContainer.load()
-                    << " V:" << mDiagVector.load()
-                    << " S:" << mDiagSlots.load()
-                    << " RAW:" << mDiagRawOk.load() << "/" << mDiagRawFail.load()
-                    << " PREIS:" << mDiagPriceMatches.load();
-        nativeAt(18.0f, 356.0f, 420.0f, diagSummary.str(), nativeMuted);
-        std::string lastItemDiag;
-        for (const auto& e : entries) {
-            if (!e.debugDetails.empty()) { lastItemDiag = e.debugDetails; break; }
-        }
-        if (lastItemDiag.empty()) lastItemDiag = "ITEM-ID: keine Kandidaten erfasst";
-        if (lastItemDiag.size() > 58) lastItemDiag = lastItemDiag.substr(0, 55) + "...";
-        nativeAt(18.0f, 371.0f, 420.0f, lastItemDiag, nativeMuted);
     }
 
     void drawInventoryOverlay(
