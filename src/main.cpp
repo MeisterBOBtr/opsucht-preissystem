@@ -2237,35 +2237,26 @@ private:
                     debugDetails = dbg.str();
                 }
 
-                // Resolve cheap/exact candidates first. For Geyser custom items we
-                // MUST NOT fall back to the vanilla material: a custom OPSUCHT
-                // netherite pickaxe can be worth millions while its Java base item
-                // is only a normal netherite pickaxe.
+                // STRICT NAME-ONLY RESOLUTION:
+                // Prices may only be assigned when the actual readable item name
+                // exactly matches a Supabase catalog alias. Technical IDs, Geyser
+                // IDs and vanilla material IDs are never price fallbacks.
                 clearPriceCacheIfApiChanged();
                 const bool isGeyserCustom = std::any_of(candidates.begin(), candidates.end(), [](const std::string& candidate) {
-                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
+                    const std::string n = normalizeItemKeepPrefix(candidate);
+                    return n.rfind("geyser custom ", 0) == 0 ||
+                           n.rfind("geyser_custom_", 0) == 0 ||
+                           n.rfind("geyser_custommain_", 0) == 0;
                 });
-
-                // First resolve readable names exactly against the Supabase
-                // catalog. Do this before any technical/base identifiers so a
-                // generic NETHERITE_AXE or totem ID cannot win over the real
-                // OPSUCHT custom name.
-                if (!stackDisplayName.empty()) {
-                    const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
-                    if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
-                        rawName = stackDisplayName;
-                    }
-                }
 
                 auto looksTechnical = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
                     if (n.rfind("minecraft:", 0) == 0 ||
                         n.rfind("geyser custom ", 0) == 0 ||
-                        (n.rfind("geyser_custom_", 0) == 0 || n.rfind("geyser_custommain_", 0) == 0) ||
+                        n.rfind("geyser_custom_", 0) == 0 ||
+                        n.rfind("geyser_custommain_", 0) == 0 ||
                         n.rfind("item ", 0) == 0) return true;
-                    // Names such as NETHERITE_AXE are technical/base labels,
-                    // not the visible OPSUCHT market name.
-                    bool hasUnderscore = value.find('_') != std::string::npos;
+                    const bool hasUnderscore = value.find('_') != std::string::npos;
                     bool hasLetter = false;
                     bool allLettersUpper = true;
                     for (unsigned char c : value) {
@@ -2277,6 +2268,12 @@ private:
                     return hasUnderscore && hasLetter && allLettersUpper;
                 };
 
+                // Try the visible/custom name first, then other readable names
+                // exposed by the item object. Never try a technical candidate.
+                if (!stackDisplayName.empty() && !looksTechnical(stackDisplayName)) {
+                    const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
+                    if (namedMatch.samples > 0 && namedMatch.sum > 0.0) rawName = stackDisplayName;
+                }
                 if (rawName.empty()) {
                     for (const auto& candidate : candidates) {
                         if (candidate.empty() || looksTechnical(candidate)) continue;
@@ -2288,41 +2285,13 @@ private:
                     }
                 }
 
-                for (const auto& candidate : candidates) {
-                    if (!rawName.empty()) break;
-                    // For Geyser/OPSUCHT custom items, never let a generic base
-                    // material such as totem, axe, helmet, or chestplate win.
-                    // Only try the full technical custom identity; the strict
-                    // display-name lookup above handles readable custom names.
-                    if (isGeyserCustom &&
-                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
-                        continue;
-                    }
-                    const PriceInfo match = cachedMatch(candidate);
-                    if (match.samples > 0 && (match.sum / match.samples) > 0.0) {
-                        rawName = candidate;
-                        break;
-                    }
-                }
-
-                // Never select a vanilla candidate for a Geyser custom stack.
-                // Keeping it unpriced is safer than displaying a completely wrong
-                // price such as 70,000 $ for a >100M $ custom item.
-                if (isGeyserCustom && rawName.empty()) {
-                    for (const auto& candidate : candidates) {
-                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0) {
-                            rawName = candidate;
-                            break;
-                        }
-                    }
-                }
-                // Do not silently pick candidates.front(): candidate order is not
-                // a reliable item identity and can turn a base material into a
-                // false article/price. If nothing matched, keep the slot unpriced.
+                // No exact readable catalog-name match means no price. This
+                // prevents a normal enchanted netherite tool or a Geyser ID from
+                // inheriting another article's price just because material matches.
                 if (rawName.empty()) {
                     ++mDiagRawFail;
                     InventoryEntry entry;
-                    entry.name = "Unbekanntes Item";
+                    entry.name = "Item nicht erfasst";
                     entry.amount = static_cast<int>(amount);
                     entry.debugDetails = std::move(debugDetails);
                     entries.push_back(std::move(entry));
