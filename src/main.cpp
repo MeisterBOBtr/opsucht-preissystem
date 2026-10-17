@@ -29,6 +29,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -271,11 +272,18 @@ static std::string normalizeTechnicalItemKey(std::string s) {
     }
     while (!compact.empty() && compact.back() == '_') compact.pop_back();
 
-    // Keep the FULL Geyser identifier as the technical identity. Do not strip
-    // `geyser_custom_` / `geyser_custommain_` here: two distinct custom items
-    // must never collapse to the same normalized key merely because their
-    // suffixes happen to match. Prefix-free/catalog matching is handled
-    // explicitly by findMatch() as a separate fallback, after exact identity.
+    // Remove the presentation prefix in its normalized form.
+    // Geyser can expose both `geyser_custom_<id>` and the distinct
+    // `geyser_custommain_<id>` spelling. Strip the longest prefix first so
+    // custom OPSUCHT IDs remain searchable against roh_daten.displayName.
+    constexpr std::string_view geyserCustomMainPrefix = "geyser_custommain_";
+    constexpr std::string_view geyserPrefix = "geyser_custom_";
+    if (compact.rfind(geyserCustomMainPrefix, 0) == 0) {
+        compact.erase(0, geyserCustomMainPrefix.size());
+    } else if (compact.rfind(geyserPrefix, 0) == 0) {
+        compact.erase(0, geyserPrefix.size());
+    }
+
     return compact;
 }
 
@@ -1245,6 +1253,10 @@ private:
                 std::unordered_map<std::string, PriceInfo> nextMaterials;
                 std::unordered_map<std::string, std::string> materialOwners;
                 std::unordered_map<std::string, bool> ambiguousMaterials;
+                // Never let two catalog rows silently overwrite the same lookup key.
+                // Ambiguous keys are removed and blocked for the rest of this refresh.
+                std::unordered_set<std::string> ambiguousPriceKeys;
+                std::unordered_set<std::string> ambiguousAliasKeys;
                 std::size_t loaded = 0;
 
                 for (const auto& object : jsonObjects(itemsJson)) {
@@ -1275,27 +1287,38 @@ private:
                     info.displayKey = true;
 
                     auto addKey = [&](std::unordered_map<std::string, PriceInfo>& target,
+                                      std::unordered_set<std::string>& ambiguousKeys,
                                       const std::string& value) {
                         if (value.empty()) return;
-                        const std::string key = normalizeItem(value);
-                        if (!key.empty()) target[key] = info;
-                        const std::string fullKey = normalizeItemKeepPrefix(value);
-                        if (!fullKey.empty()) target[fullKey] = info;
-                        const std::string technicalKey = normalizeTechnicalItemKey(value);
-                        if (!technicalKey.empty()) target[technicalKey] = info;
+                        auto addOne = [&](const std::string& candidate) {
+                            if (candidate.empty() || ambiguousKeys.count(candidate)) return;
+                            auto existing = target.find(candidate);
+                            if (existing == target.end()) {
+                                target.emplace(candidate, info);
+                            } else {
+                                // Same key pointing at different catalog identities is unsafe.
+                                // Remove it rather than showing whichever row loaded last.
+                                const bool sameIdentity =
+                                    normalizeItem(existing->second.displayName) == normalizeItem(info.displayName) &&
+                                    std::abs(existing->second.sum - info.sum) < 0.000001 &&
+                                    existing->second.samples == info.samples;
+                                if (!sameIdentity) {
+                                    target.erase(existing);
+                                    ambiguousKeys.insert(candidate);
+                                }
+                            }
+                        };
+                        addOne(normalizeItem(value));
+                        addOne(normalizeItemKeepPrefix(value));
+                        addOne(normalizeTechnicalItemKey(value));
                     };
 
-                    addKey(nextPrices, name);
-                    addKey(nextAliases, name);
-                    addKey(nextAliases, opsuchtName);
-                    // Match against roh_daten.displayName as well as the flattened
-                    // article columns. This lets a Bedrock/Geyser item resolve to
-                    // the stored OPSUCHT item record and then use that article's
-                    // averaged price. Keep material IDs out of this alias map.
-                    addKey(nextAliases, rawDataName);
-                    // Keep the Supabase recognition key available as a dynamic
-                    // catalog alias too. It is not treated as a material ID.
-                    addKey(nextAliases, recognitionKey);
+                    addKey(nextPrices, ambiguousPriceKeys, name);
+                    addKey(nextAliases, ambiguousAliasKeys, opsuchtName);
+                    // Display names from roh_daten are the preferred catalog aliases.
+                    addKey(nextAliases, ambiguousAliasKeys, rawDataName);
+                    // The recognition key is useful only if it uniquely identifies one row.
+                    addKey(nextAliases, ambiguousAliasKeys, recognitionKey);
                     // Do NOT add minecraft_id as an article alias. Multiple OPSUCHT
                     // custom items (e.g. talismans, tool/armor tiers) can share one
                     // Bedrock base ID; storing that ID here made the last article
@@ -1308,7 +1331,9 @@ private:
                     if (!minecraftId.empty()) {
                         const std::string materialKey = normalizeItem(minecraftId);
                         auto owner = materialOwners.find(materialKey);
-                        const std::string articleKey = normalizeItem(!name.empty() ? name : opsuchtName);
+                        const std::string articleKey = normalizeItem(!rawDataName.empty()
+                            ? rawDataName
+                            : (!opsuchtName.empty() ? opsuchtName : name));
                         if (owner == materialOwners.end()) {
                             materialOwners[materialKey] = articleKey;
                             nextMaterials[materialKey] = info;
@@ -2237,26 +2262,35 @@ private:
                     debugDetails = dbg.str();
                 }
 
-                // STRICT NAME-ONLY RESOLUTION:
-                // Prices may only be assigned when the actual readable item name
-                // exactly matches a Supabase catalog alias. Technical IDs, Geyser
-                // IDs and vanilla material IDs are never price fallbacks.
+                // Resolve cheap/exact candidates first. For Geyser custom items we
+                // MUST NOT fall back to the vanilla material: a custom OPSUCHT
+                // netherite pickaxe can be worth millions while its Java base item
+                // is only a normal netherite pickaxe.
                 clearPriceCacheIfApiChanged();
                 const bool isGeyserCustom = std::any_of(candidates.begin(), candidates.end(), [](const std::string& candidate) {
-                    const std::string n = normalizeItemKeepPrefix(candidate);
-                    return n.rfind("geyser custom ", 0) == 0 ||
-                           n.rfind("geyser_custom_", 0) == 0 ||
-                           n.rfind("geyser_custommain_", 0) == 0;
+                    return normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0;
                 });
+
+                // First resolve readable names exactly against the Supabase
+                // catalog. Do this before any technical/base identifiers so a
+                // generic NETHERITE_AXE or totem ID cannot win over the real
+                // OPSUCHT custom name.
+                if (!stackDisplayName.empty()) {
+                    const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
+                    if (namedMatch.samples > 0 && namedMatch.sum > 0.0) {
+                        rawName = stackDisplayName;
+                    }
+                }
 
                 auto looksTechnical = [](const std::string& value) {
                     const std::string n = normalizeItemKeepPrefix(value);
                     if (n.rfind("minecraft:", 0) == 0 ||
                         n.rfind("geyser custom ", 0) == 0 ||
-                        n.rfind("geyser_custom_", 0) == 0 ||
-                        n.rfind("geyser_custommain_", 0) == 0 ||
+                        (n.rfind("geyser_custom_", 0) == 0 || n.rfind("geyser_custommain_", 0) == 0) ||
                         n.rfind("item ", 0) == 0) return true;
-                    const bool hasUnderscore = value.find('_') != std::string::npos;
+                    // Names such as NETHERITE_AXE are technical/base labels,
+                    // not the visible OPSUCHT market name.
+                    bool hasUnderscore = value.find('_') != std::string::npos;
                     bool hasLetter = false;
                     bool allLettersUpper = true;
                     for (unsigned char c : value) {
@@ -2268,12 +2302,6 @@ private:
                     return hasUnderscore && hasLetter && allLettersUpper;
                 };
 
-                // Try the visible/custom name first, then other readable names
-                // exposed by the item object. Never try a technical candidate.
-                if (!stackDisplayName.empty() && !looksTechnical(stackDisplayName)) {
-                    const PriceInfo namedMatch = mApi.findExactMatch(stackDisplayName);
-                    if (namedMatch.samples > 0 && namedMatch.sum > 0.0) rawName = stackDisplayName;
-                }
                 if (rawName.empty()) {
                     for (const auto& candidate : candidates) {
                         if (candidate.empty() || looksTechnical(candidate)) continue;
@@ -2285,13 +2313,41 @@ private:
                     }
                 }
 
-                // No exact readable catalog-name match means no price. This
-                // prevents a normal enchanted netherite tool or a Geyser ID from
-                // inheriting another article's price just because material matches.
+                for (const auto& candidate : candidates) {
+                    if (!rawName.empty()) break;
+                    // For Geyser/OPSUCHT custom items, never let a generic base
+                    // material such as totem, axe, helmet, or chestplate win.
+                    // Only try the full technical custom identity; the strict
+                    // display-name lookup above handles readable custom names.
+                    if (isGeyserCustom &&
+                        normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) != 0) {
+                        continue;
+                    }
+                    const PriceInfo match = cachedMatch(candidate);
+                    if (match.samples > 0 && (match.sum / match.samples) > 0.0) {
+                        rawName = candidate;
+                        break;
+                    }
+                }
+
+                // Never select a vanilla candidate for a Geyser custom stack.
+                // Keeping it unpriced is safer than displaying a completely wrong
+                // price such as 70,000 $ for a >100M $ custom item.
+                if (isGeyserCustom && rawName.empty()) {
+                    for (const auto& candidate : candidates) {
+                        if (normalizeItemKeepPrefix(candidate).rfind("geyser custom ", 0) == 0) {
+                            rawName = candidate;
+                            break;
+                        }
+                    }
+                }
+                // Do not silently pick candidates.front(): candidate order is not
+                // a reliable item identity and can turn a base material into a
+                // false article/price. If nothing matched, keep the slot unpriced.
                 if (rawName.empty()) {
                     ++mDiagRawFail;
                     InventoryEntry entry;
-                    entry.name = "Item nicht erfasst";
+                    entry.name = "Unbekanntes Item";
                     entry.amount = static_cast<int>(amount);
                     entry.debugDetails = std::move(debugDetails);
                     entries.push_back(std::move(entry));
